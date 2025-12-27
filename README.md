@@ -143,9 +143,5 @@ Build & iterate locally
 ## Contributing
 Contributions, issues, and PRs welcome. Open an issue to discuss larger changes before submitting PRs. Follow standard fork → branch → PR workflow.
 
-## Changelog (selected)
-- 1.1.0 — 
-- 1.0.0 — Initial public release (TUI + GUI).
-
 ## License
 GNU GPL-3.0 — see [LICENSE](LICENSE)  file.
