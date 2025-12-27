@@ -16,6 +16,7 @@ include_directories(include include/external)
 set(SOURCES
     src/main.cpp
     src/core/ori_core.cpp
+    src/core/ori_config.cpp
     src/core/ori_edit.cpp
     src/plugins/orpm.cpp
     src/gui/gui.cpp
@@ -52,6 +53,8 @@ target_link_libraries(ori PRIVATE ${JSONCPP_LIBRARIES} ${CURL_LIBRARIES} stdc++f
 # if(CURL_FOUND)
 #     target_link_libraries(ori ${CURL_LIBRARIES})
 # endif()
+
+message(STATUS "Meld is an optional dependency for graphical diffs. Install it for enhanced compare functionality.")
 
 # Copy system prompt into build directory
 

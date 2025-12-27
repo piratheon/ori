@@ -14,6 +14,27 @@ struct ChatMessage {
     std::string content;
 };
 
+struct Config {
+    int port;
+    bool no_banner;
+    bool no_clear;
+    std::string model;
+
+    Config();
+};
+
+class ConfigManager {
+private:
+    std::string config_path;
+
+public:
+    ConfigManager();
+    void loadConfig(Config& config);
+    void saveConfig(const Config& config);
+    void loadExternalConfig(Config& config, const std::string& path);
+    void updateConfig(const std::string& key, const std::string& value);
+};
+
 class OpenRouterAPI {
 private:
     std::string api_key;
@@ -50,6 +71,8 @@ private:
     size_t current_output_lines = 0;  // Track number of lines output
 public:
     std::unique_ptr<OpenRouterAPI> api;
+    Config config;
+    ConfigManager configManager;
     
 public:
     OriAssistant();

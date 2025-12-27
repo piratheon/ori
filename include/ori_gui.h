@@ -3,7 +3,7 @@
 
 namespace ori
 {
-    void start_gui();
+    void start_gui(int port);
 }
 
 #endif // ORI_GUI_H

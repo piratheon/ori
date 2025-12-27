@@ -120,20 +120,21 @@ I am here to be your reliable partner in the terminal. Let me know what you need
 )ORI_PROMPT";
 
 void showUsage() {
-    std::cout << "ORI Terminal Assistant v1.0.0 - Linux TUI AI Assistant\n";
+    std::cout << "ORI Terminal Assistant v1.1.0 - Linux TUI AI Assistant\n";
     std::cout << "Usage: ori [options] [prompt]\n\n";
     std::cout << "Options:\n";
     std::cout << "  -h, --help              Show this help message\n";
     std::cout << "  -v, --version           Show version information\n";
     std::cout << "  -g, --gui               Start the web UI\n";
     std::cout << "  -y, --yes               Auto-confirm any command execution prompts\n";
+    std::cout << "  -c, --config <command>  Manage configuration\n";
+    std::cout << "                            load <path>  Load a configuration from a file\n";
+    std::cout << "                            set <key> <value>  Set a configuration value\n";
     std::cout << "  --check-for-updates     Check for updates\n";
-    std::cout << "  --orpm                  Run the plugin manager\n";
-    std::cout << "  --orpm-install <plugin>      Install a plugin\n";
-    std::cout << "  --orpm-remove <plugin>       Remove a plugin\n";
-    std::cout << "  --orpm-search <query>        Search for plugins\n";
-    std::cout << "  --orpm-list             List available plugins\n";
-    std::cout << "  --orpm-list-installed      List installed plugins\n";
+    std::cout << "  --no-banner             Load Ori without the ASCII banner\n";
+    std::cout << "  --no-clear              Load Ori without clearing the terminal\n";
+    std::cout << "  -m, --model <model_name>      Specify the AI model to use (overrides config)\n";
+    std::cout << "  -p, --port <port_number>      Specify the port for the GUI (overrides config)\n";
     std::cout << "\nShell Integration Examples:\n";
     std::cout << "  ori -y 'install nmap for me'\n";
     std::cout << "  ori print current active username\n";
@@ -141,17 +142,10 @@ void showUsage() {
 }
 
 void showVersion() {
-    std::cout << "ORI Terminal Assistant v1.0.0\n";
+    std::cout << "ORI Terminal Assistant v1.1.0\n";
 }
 
-void processDirectPrompt(const std::string& prompt, bool auto_confirm) {
-    OriAssistant assistant;
-    assistant.api->setSystemPrompt(SYSTEM_PROMPT);
-    if (!assistant.initialize()) {
-        std::cerr << "Failed to initialize ORI Terminal Assistant. Please check your API key configuration.\n";
-        exit(1);
-    }
-    
+void processDirectPrompt(OriAssistant& assistant, const std::string& prompt, bool auto_confirm) {
     // Get response directly without showing the prompt again
     std::string response = assistant.api->sendQuery(prompt);
     assistant.handleResponse(response, auto_confirm);
@@ -200,20 +194,16 @@ void runOrpm(int argc, char* argv[]) {
 
 int main(int argc, char* argv[]) {
     std::string executable_path = argv[0];
-    if (argc <= 1) {
-        // No arguments, run interactive assistant
-        OriAssistant assistant;
-        assistant.setExecutablePath(executable_path);
-        assistant.api->setSystemPrompt(SYSTEM_PROMPT);
-        if (!assistant.initialize()) {
-            std::cerr << "Failed to initialize ORI Terminal Assistant. Please check your API key configuration.\n";
-            return 1;
-        }
-        assistant.run();
-        return 0;
+    OriAssistant assistant;
+    assistant.setExecutablePath(executable_path);
+    assistant.api->setSystemPrompt(SYSTEM_PROMPT);
+    if (!assistant.initialize()) {
+        std::cerr << "Failed to initialize ORI Terminal Assistant. Please check your API key configuration.\n";
+        return 1;
     }
 
     bool auto_confirm = false;
+    bool gui_mode = false;
     std::vector<std::string> args(argv + 1, argv + argc);
     std::string prompt = "";
     int prompt_start_index = -1;
@@ -227,22 +217,49 @@ int main(int argc, char* argv[]) {
             showVersion();
             return 0;
         } else if (arg == "-g" || arg == "--gui") {
-            ori::start_gui();
-            return 0;
+            gui_mode = true;
         } else if (arg == "-y" || arg == "--yes") {
             auto_confirm = true;
+        } else if (arg == "-c" || arg == "--config") {
+            if (i + 1 < args.size()) {
+                std::string config_cmd = args[i + 1];
+                if (config_cmd == "load" && i + 2 < args.size()) {
+                    assistant.configManager.loadExternalConfig(assistant.config, args[i + 2]);
+                    i += 2;
+                } else if (config_cmd == "set" && i + 3 < args.size()) {
+                    assistant.configManager.updateConfig(args[i + 2], args[i + 3]);
+                    return 0;
+                }
+            }
         } else if (arg == "--check-for-updates") {
-            OriAssistant assistant;
-            assistant.setExecutablePath(executable_path);
             assistant.checkForUpdates(false);
             return 0;
         } else if (arg == "--orpm" || arg.substr(0, 6) == "--orpm") {
-            runOrpm(argc, argv);
+            std::cout << "ORPM is still in development and is not yet available." << std::endl;
             return 0;
+        } else if (arg == "--no-banner") {
+            assistant.config.no_banner = true;
+        } else if (arg == "--no-clear") {
+            assistant.config.no_clear = true;
+        } else if (arg == "-m" || arg == "--model") {
+            if (i + 1 < args.size()) {
+                assistant.config.model = args[i + 1];
+                i++;
+            }
+        } else if (arg == "-p" || arg == "--port") {
+            if (i + 1 < args.size()) {
+                assistant.config.port = std::stoi(args[i + 1]);
+                i++;
+            }
         } else {
             prompt_start_index = i;
             break;
         }
+    }
+
+    if (gui_mode) {
+        ori::start_gui(assistant.config.port);
+        return 0;
     }
 
     if (prompt_start_index != -1) {
@@ -253,19 +270,10 @@ int main(int argc, char* argv[]) {
     }
 
     if (!prompt.empty()) {
-        processDirectPrompt(prompt, auto_confirm);
+        processDirectPrompt(assistant, prompt, auto_confirm);
         return 0;
     }
 
-    // If we are here, it means flags were passed but no prompt, or only -y was passed.
-    // Run interactive mode.
-    OriAssistant assistant;
-    assistant.setExecutablePath(executable_path);
-    assistant.api->setSystemPrompt(SYSTEM_PROMPT);
-    if (!assistant.initialize()) {
-        std::cerr << "Failed to initialize ORI Terminal Assistant. Please check your API key configuration.\n";
-        return 1;
-    }
     assistant.run();
     return 0;
 }

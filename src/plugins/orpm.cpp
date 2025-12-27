@@ -77,11 +77,11 @@ void Orpm::loadPluginDatabase() {
     // If JSON library is not available, populate with some example plugins
     PluginInfo voice_chat;
     voice_chat.name = "voice-chat";
-    voice_chat.version = "1.0.0";
+    voice_chat.version = "1.1.0";
     voice_chat.description = "Voice interaction plugin for Ori Assistant";
     voice_chat.developer = "Ori Team";
     voice_chat.git_url = "https://github.com/ori-assistant/voice-chat-plugin";
-    voice_chat.download_url = "https://github.com/ori-assistant/voice-chat-plugin/releases/download/v1.0.0/voice-chat.tar.xz";
+    voice_chat.download_url = "https://github.com/ori-assistant/voice-chat-plugin/releases/download/v1.1.0/voice-chat.tar.xz";
     voice_chat.installed_version = "";
     voice_chat.is_installed = false;
     

@@ -2,11 +2,11 @@
   "plugins": [
     {
       "name": "voice-chat",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "description": "Voice interaction plugin for Ori Assistant",
       "developer": "Ori Team",
       "git_url": "https://github.com/ori-assistant/voice-chat-plugin",
-      "download_url": "https://github.com/ori-assistant/voice-chat-plugin/releases/download/v1.0.0/voice-chat.tar.xz"
+      "download_url": "https://github.com/ori-assistant/voice-chat-plugin/releases/download/v1.1.0/voice-chat.tar.xz"
     },
     {
       "name": "shell-access",

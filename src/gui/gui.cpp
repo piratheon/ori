@@ -68,7 +68,7 @@ std::string generate_session_name(const std::string& prompt) {
     return word1 + " " + word2;
 }
 
-void ori::start_gui()
+void ori::start_gui(int port)
 {
     httplib::Server svr;
 
@@ -107,7 +107,7 @@ void ori::start_gui()
     
     svr.Get("/api/version", [](const httplib::Request &, httplib::Response &res) {
       Json::Value root;
-      root["version"] = "1.0.0";
+      root["version"] = "1.1.0";
       res.set_content(root.toStyledString(), "application/json");
     });
 
@@ -166,15 +166,17 @@ void ori::start_gui()
 
         OriAssistant assistant;
         assistant.api->setSystemPrompt(GUI_SYSTEM_PROMPT);
-        if (!model.empty()) {
-            assistant.api->setModel(model);
-        }
         assistant.api->setIsGui(true);
         if (!assistant.initialize()) {
             Json::Value err;
             err["error"] = "Failed to initialize assistant";
             res.set_content(err.toStyledString(), "application/json");
             return;
+        }
+
+        // Apply model selection after initialization so config does not override it
+        if (!model.empty()) {
+            assistant.api->setModel(model);
         }
 
         std::string response = assistant.api->sendQuery(prompt);
@@ -303,7 +305,7 @@ void ori::start_gui()
     svr.Get(R"(/js/(.*))", [&](const httplib::Request &req, httplib::Response &res){ if (serve_local(req.path, res)) return; res.status = 404; res.set_content("Not Found", "text/plain"); });
     svr.Get(R"(/css/(.*))", [&](const httplib::Request &req, httplib::Response &res){ if (serve_local(req.path, res)) return; res.status = 404; res.set_content("Not Found", "text/plain"); });
     svr.Get(R"(/lib/(.*))", [&](const httplib::Request &req, httplib::Response &res){ if (serve_local(req.path, res)) return; res.status = 404; res.set_content("Not Found", "text/plain"); });
-    svr.Get(R"(/vendor/(.*))", [&](const httplib::Request &req, httplib::Response &res){ if (serve_local(req.path, res)) return; res.status = 404; res.set_content("Not Found", "text/plain"); });
+    svr.Get(R"(/vendor/(.*))", [&](const httplib::Request &req, httplib::Response &res){ if (serve_local(req.path, res)) return; res.status = 444; res.set_content("Not Found", "text/plain"); });
     svr.Get(R"(/assets/(.*))", [&](const httplib::Request &req, httplib::Response &res){ if (serve_local(req.path, res)) return; res.status = 404; res.set_content("Not Found", "text/plain"); });
 
     // Generic static file fallback: serve files from ./www for any other path
@@ -343,6 +345,6 @@ void ori::start_gui()
         res.set_content("Not Found", "text/plain");
     });
 
-    std::cout << "Starting server on port 8080..." << std::endl;
-    svr.listen("0.0.0.0", 8080);
+    std::cout << "Starting server on port " << port << "..." << std::endl;
+    svr.listen("0.0.0.0", port);
 }

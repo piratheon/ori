@@ -46,13 +46,27 @@ bool OriEdit::applyChanges(const EditOperation& op) {
     }
     
     if (op.preview) {
-        showPreview(op);
+        if (!showPreview(op)) {
+            return false;
+        }
     }
     
     if (op.interactive) {
         if (!confirmChange("Apply these changes?", "")) {
             return false;
         }
+    }
+
+    if (op.diff) {
+        std::string tempFile = "/tmp/ori_preview_" + std::to_string(getpid());
+        std::ofstream temp(tempFile);
+        temp << op.newContent;
+        temp.close();
+        if (!showDiff(op.filename, tempFile)) {
+            unlink(tempFile.c_str());
+            return false;
+        }
+        unlink(tempFile.c_str());
     }
     
     // Write new content
@@ -68,12 +82,22 @@ bool OriEdit::applyChanges(const EditOperation& op) {
     return true;
 }
 
+bool isGuiEnvironment();
+
 bool OriEdit::showDiff(const std::string& file1, const std::string& file2) {
-    // Default behavior: show colored unified diff
+    if (isGuiEnvironment() && system("command -v meld > /dev/null") == 0) {
+        std::string cmd = "meld " + file1 + " " + file2;
+        system(cmd.c_str());
+        return true;
+    }
+
     std::string cmd = "diff --color -u " + file1 + " " + file2;
-    int res = system(cmd.c_str());
-    (void)res; // ignore exit code
-    return true;
+    system(cmd.c_str());
+
+    std::cout << YELLOW << "Apply these changes? (y/n): " << RESET;
+    std::string response;
+    std::getline(std::cin, response);
+    return (response == "y" || response == "Y");
 }
 
 bool OriEdit::restoreBackup(const std::string& filename) {

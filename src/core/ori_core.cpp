@@ -11,6 +11,34 @@
 #include <vector>
 #include <cstdio>
 #include <filesystem>
+#include <thread>
+#include <chrono>
+#include <atomic>
+#include <csignal>
+
+static std::atomic<bool> keep_running{true};
+
+void run_spinner() {
+    const std::vector<std::string> frames = {
+        "⠾", "⠽", "⠻", "⠯", "⠷"
+    };
+    const int fps = 12;
+    size_t i = 0;
+    std::cout << "\x1b[?25l"; 
+    while (keep_running) {
+        std::cout << "\r" << frames[i] << " loading..." << std::flush;
+        i = (i + 1) % frames.size();
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000 / fps));
+    }
+    std::cout << "\r\x1b[2K\x1b[?25h";
+}
+
+#include <cstdlib>
+
+bool isGuiEnvironment() {
+    const char* display = std::getenv("DISPLAY");
+    return display != nullptr && display[0] != '\0';
+}
 
 // ANSI Color Codes
 const std::string RESET = "\033[0m";
@@ -242,7 +270,7 @@ std::string OriAssistant::readInput() {
 
 OpenRouterAPI::OpenRouterAPI() {
     // Constructor
-    model = "x-ai/grok-4.1-fast:free";
+    model = "google/gemini-2.0-flash-exp:free";
 }
 
 OpenRouterAPI::~OpenRouterAPI() {
@@ -466,7 +494,11 @@ std::string OpenRouterAPI::sendQuery(const std::string& prompt) {
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "OriAssistant/1.0");
     
     // Perform the request
+    keep_running = true;
+    std::thread spinner_thread(run_spinner);
     CURLcode res = curl_easy_perform(curl);
+    keep_running = false;
+    spinner_thread.join();
     
     // Clean up
     curl_slist_free_all(headers);
@@ -571,6 +603,9 @@ bool OriAssistant::initialize() {
         }
     }
     
+    configManager.loadConfig(config);
+    api->setModel(config.model);
+
     if (!api->loadApiKey()) {
         std::cerr << RED << "Error: Failed to load API key. Please set OPENROUTER_API_KEY or create Openrouter_api_key.txt." << RESET << std::endl;
         return false;
@@ -580,17 +615,17 @@ bool OriAssistant::initialize() {
 
 void OriAssistant::run() {
     checkForUpdates(true);
-    // Clear screen before showing banner
-    std::system("clear");
+    if (!config.no_clear) {
+        // Clear screen before showing banner
+        std::system("clear");
+    }
     
     // Save cursor position for future reference
     printf("\033[s");
     
-    // Clear screen and reset cursor to top
-    printf("\033[2J\033[H");
-    
-    // Display banner
-    std::cout << BLUE << R"(
+    if (!config.no_banner) {
+        // Display banner
+        std::cout << BLUE << R"(
     ███████    ███████████   █████            ███████████ █████  █████ █████
   ███▒▒▒▒▒███ ▒▒███▒▒▒▒▒███ ▒▒███            ▒█▒▒▒███▒▒▒█▒▒███  ▒▒███ ▒▒███ 
  ███     ▒▒███ ▒███    ▒███  ▒███            ▒   ▒███  ▒  ▒███   ▒███  ▒███ 
@@ -600,9 +635,10 @@ void OriAssistant::run() {
  ▒▒▒███████▒   █████   █████ █████               █████    ▒▒████████   █████
    ▒▒▒▒▒▒▒    ▒▒▒▒▒   ▒▒▒▒▒ ▒▒▒▒▒               ▒▒▒▒▒      ▒▒▒▒▒▒▒▒   ▒▒▒▒▒
 )" << RESET << std::endl;
-    std::cout << BOLD << BLUE << "ORI Terminal Assistant v1.0.0" << RESET << "\n";
-    // Single newline after instructions to avoid empty-space gap
-    std::cout << "Type '/help' for available commands or '/quit' to exit.\n";
+        std::cout << BOLD << BLUE << "ORI Terminal Assistant v1.1.0" << RESET << "\n";
+        // Single newline after instructions to avoid empty-space gap
+        std::cout << "Type '/help' for available commands or '/quit' to exit.\n";
+    }
     
     // Save cursor position after banner (for potential future use)
     printf("\033[s");
@@ -890,7 +926,7 @@ void OriAssistant::checkForUpdates(bool silent) {
 
         if (res == CURLE_OK) {
             std::ifstream version_file(".version");
-            std::string current_version = "1.0.0";
+            std::string current_version = "1.1.0";
             if (version_file.is_open()) {
                 std::getline(version_file, current_version);
                 version_file.close();

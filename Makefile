@@ -18,11 +18,9 @@ build/ori:
 install: all
 	mkdir -p $(BIN_DIR)
 	mkdir -p $(SHARE_DIR)
-	mkdir -p $(SHARE_DIR)/www
 	install -D build/ori $(BIN_DIR)/ori
 	install -D orpm $(BIN_DIR)/orpm
 	cp -r plugins/* $(SHARE_DIR)/
-	cp -r www/* $(SHARE_DIR)/www/
 
 uninstall:
 	rm -f $(BIN_DIR)/ori

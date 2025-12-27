@@ -8,146 +8,144 @@
  ▒▒▒███████▒   █████   █████ █████               █████    ▒▒████████   █████
    ▒▒▒▒▒▒▒    ▒▒▒▒▒   ▒▒▒▒▒ ▒▒▒▒▒               ▒▒▒▒▒      ▒▒▒▒▒▒▒▒   ▒▒▒▒▒
 ```
+## Ori Assistant v1.1.0
 
-# Ori Assistant v1.0.0
+A terminal‑first AI assistant for Linux with both a Text User Interface (TUI) and a web-based Graphical User Interface (GUI). Integrates with OpenRouter to access multiple LLMs. Built for developers, power users, and sysadmins who want to run AI workflows from the terminal or the browser.
 
-Ori Assistant is a powerful and versatile AI assistant for Linux, now with both a Text User Interface (TUI) and a web-based Graphical User Interface (GUI). It integrates with the OpenRouter API to provide access to a wide range of AI models. Ori is designed for developers, power users, and anyone who wants to leverage the power of AI from their terminal or browser.
+Version: 1.1.0 — Release highlights: loading spinner, persistent config, new CLI flags.
+
+## Quick links
+- Repository: https://github.com/piratheon/ori (this one)
+- OpenRouter keys: https://openrouter.ai/settings/keys
 
 ## Features
 
 ### Core
+- **OpenRouter integration:** Connect to multiple AI models.
+- **Plugin system & Orpm:** Extendable architecture with package management.
+- **Secure API key handling:** API key stored at `~/.config/ori/key`.
+- **Automatic update checks** on startup.
+- **Persistent config:** `~/.config/ori/config.json`.
 
-- **OpenRouter API Integration**: Connects to various AI models through OpenRouter.
-- **Plugin System**: Extensible architecture with plugin support.
-- **Orpm Plugin Manager**: Built-in package manager for plugins.
-- **Secure API Key Handling**: API key is stored securely in `~/.config/ori/key`.
-- **Automatic Updates**: Silently checks for updates on startup.
+### TUI (Terminal)
+- Interactive conversation with session context.
+- Slash commands: `/help`, `/clear`, `/quit`.
+- Agentic command execution with confirmation.
+- Multiline input and editor-friendly UX.
 
-### TUI (Text User Interface)
+### GUI (Browser)
+- Web-based chat UI with chat history and model selector.
+- Code canvas for snippets and inline command execution.
+- Runs a local web server (default port 8080).
 
-- **Slash Commands**: Internal commands like `/help` and `/quit`.
-- **Agentic Command Execution**: The AI can run shell commands to perform tasks, with user confirmation.
-- **Session Context**: Remembers conversation history in interactive mode.
-- **Clear Command**: A `/clear` command to clear the terminal screen.
+## New in 1.1.0
+- Loading spinner while waiting for responses.
+- Config file support (`~/.config/ori/config.json`).
+- CLI flags:
+  - `--no-banner` — hide ASCII banner.
+  - `--no-clear` — don’t clear terminal on start.
+  - `--model` / `-m` — override default model.
+  - `--port` / `-p` — override GUI port.
+  - `--config` / `-c`:
+    - `load <path>` — load JSON config.
+    - `set <key> <value>` — set a config value.
 
-### GUI (Graphical User Interface)
-
-- **Web-Based Interface**: A modern and intuitive web-based GUI.
-- **Chat History**: View and manage your chat history.
-- **Model Selection**: Choose from a list of available AI models.
-- **Command Execution**: Execute shell commands directly from the GUI.
-- **Code Canvas**: Display and interact with code snippets.
-
-## Installation
-
-### Prerequisites
-
-- C++14 compatible compiler (GCC 5.0+ or Clang 3.4+)
+## Prerequisites
+- C++14-compatible compiler (GCC 5.0+ or Clang 3.4+)
 - CMake 3.10+
 - OpenRouter API key
 
-### Building from Source
+## Install
 
-```bash
-# Clone the repository
-git clone https://github.com/piratheon/ori.git
-cd ori
+### Build from source
+1. Clone:
+   ```
+   git clone https://github.com/piratheon/ori.git
+   cd ori
+   ```
+2. Build (automated):
+   ```
+   ./build.sh
+   ```
+   or manual:
+   ```
+   mkdir build && cd build
+   cmake ..
+   make
+   ```
+3. Executable will be at `build/ori`.
 
-# Build using the provided script
-./build.sh
-
-# Or build manually
-mkdir build
-cd build
-cmake ..
-make
-```
+### Arch (AUR)
+- Install with an AUR helper:
+  ```
+  yay -S aur/ori
+  ```
 
 ## Configuration
 
-### API Key Setup
+- Default config: `~/.config/ori/config.json`
+- API key file: `~/.config/ori/key` (or set `OPENROUTER_API_KEY` env var)
+- Common config keys: `port`, `model`, `no_banner`, `no_clear`
 
-1.  **Get an Openrouter API Key**: from [here](https://openrouter.ai/settings/keys)
-2.  **Set the key**:
-    *   **Environment Variable**: Set `OPENROUTER_API_KEY` in your shell profile.
-    *   **Interactive Prompt**: Run `ori` for the first time, and it will prompt you to enter your API key.
+Examples:
+- Set a config value:
+  ```
+  ./build/ori --config set model qwen/qwen3-coder:free
+  ```
+- Load a JSON config:
+  ```
+  ./build/ori --config load /path/to/settings.json
+  ```
 
 ## Usage
 
-### TUI Mode
-
-```bash
-# Start the interactive assistant
+### TUI (interactive)
+Start the interactive assistant:
+```
 ./build/ori
+```
+Useful flags:
+- `--help` — show CLI help
+- `--version` — print version
+- `/help`, `/clear`, `/quit` — available inside TUI
 
-# Show help
-./build/ori --help
-
-# Show version
-./build/ori --version
-
-# Run a non-interactive command
-./build/ori -y "install nmap for me"
+### Non-interactive
+Run a one-off prompt:
+```
+./build/ori -y "what is my kernel version?"
 ```
 
-In interactive mode, you can use slash commands like `/help`, `/quit`, and `/clear`.
-
-### GUI Mode
-
-To launch the GUI, run:
-
-```bash
+### GUI
+Start the web UI:
+```
 ./build/ori --gui
 ```
+Default: http://localhost:8080 (override with `--port`)
 
-This will start a web server on `http://localhost:8080`. Open this URL in your browser to access the GUI.
-
-### Plugin Manager (orpm)
-
-`orpm` is used to manage plugins.
-
-```bash
-# List available plugins
-orpm --orpm-list
-
-# Install a plugin
-orpm --orpm-install "voice-chat"
-
-# Remove a plugin
-orpm --orpm-remove "voice-chat"
-```
+### ASCII banner (optional)
+Disable with `--no-banner`.
 
 ## Development
 
-### Project Structure
-
+Project layout:
 ```
 .
 ├── build.sh
 ├── CMakeLists.txt
-├── include
-│   ├── ori_core.h
-│   ├── ori_gui.h
-│   └── orpm.h
-├── src
-│   ├── core
-│   │   ├── ori_core.cpp
-│   │   └── ...
-│   ├── gui
-│   │   └── gui.cpp
-│   ├── main.cpp
-│   └── plugins
-│       └── orpm.cpp
-└── www
-    ├── index.html
-    ├── css
-    └── js
+├── include/
+├── src/
+├── www/         # web UI assets
+└── build/       # build output
 ```
 
-## License
-
-This project is licensed under the GNU GPL-3.0 license - see the [LICENSE](LICENSE) file for details.
+Build & iterate locally
 
 ## Contributing
+Contributions, issues, and PRs welcome. Open an issue to discuss larger changes before submitting PRs. Follow standard fork → branch → PR workflow.
 
-Contributions are welcome! Please feel free to submit pull requests or open issues for bugs and feature requests.
+## Changelog (selected)
+- 1.1.0 — 
+- 1.0.0 — Initial public release (TUI + GUI).
+
+## License
+GNU GPL-3.0 — see [LICENSE](LICENSE)  file.
