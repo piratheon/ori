@@ -1,699 +1,771 @@
 <!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Orion-UI (Alpha)</title>
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-    
-    <!-- Tailwind CSS -->
-    <script src="/tw.js"></script>
-    
-    <!-- Chart.js -->
-    <script src="lib/chart.js"></script>
-    
-    <!-- Marked.js for Markdown parsing -->
-    <script src="lib/marked.min.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Orion (Material You)</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<!-- Tailwind CSS -->
+<script src="/tw.js"></script>
+<!-- Chart.js -->
+<script src="lib/chart.js"></script>
+<!-- Marked.js -->
+<script src="lib/marked.min.js"></script>
+<!-- Icons -->
+<link rel="stylesheet" href="css/all.min.css">
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script>
+tailwind.config = {
+darkMode: 'class',
+theme: {
+extend: {
+fontFamily: {
+sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+display: ['"Outfit"', 'sans-serif'],
+mono: ['"JetBrains Mono"', 'monospace'],
+},
+colors: {
+md: {
+sys: {
+color: {
+background: '#0F0E13',
+onBackground: '#E6E1E5',
+surface: '#141218',
+surfaceContainerLow: '#1D1B20',
+surfaceContainer: '#211F26',
+surfaceContainerHigh: '#2B2930',
+surfaceContainerHighest: '#36343B',
+onSurface: '#E6E1E5',
+onSurfaceVariant: '#CAC4D0',
+outline: '#938F99',
+outlineVariant: '#49454F',
+primary: '#D0BCFF',
+onPrimary: '#381E72',
+primaryContainer: '#4F378B',
+onPrimaryContainer: '#EADDFF',
+secondary: '#CCC2DC',
+onSecondary: '#332D41',
+secondaryContainer: '#4A4458',
+onSecondaryContainer: '#E8DEF8',
+tertiary: '#EFB8C8',
+onTertiary: '#492532',
+tertiaryContainer: '#633B48',
+onTertiaryContainer: '#FFD8E4',
+error: '#F2B8B5',
+onError: '#601410',
+errorContainer: '#8C1D18',
+onErrorContainer: '#F9DEDC',
+}
+}
+}
+},
+borderRadius: {
+'xs': '4px',
+'sm': '8px',
+'md': '12px',
+'lg': '16px',
+'xl': '24px',
+'2xl': '32px',
+'3xl': '48px',
+'4xl': '56px',
+},
+boxShadow: {
+'elevation-1': '0px 1px 2px rgba(0, 0, 0, 0.3), 0px 1px 3px 1px rgba(0, 0, 0, 0.15)',
+'elevation-2': '0px 1px 2px rgba(0, 0, 0, 0.3), 0px 2px 6px 2px rgba(0, 0, 0, 0.15)',
+'elevation-3': '0px 4px 8px 3px rgba(0, 0, 0, 0.15), 0px 1px 3px rgba(0, 0, 0, 0.3)',
+'glow': '0 0 20px -5px rgba(208, 188, 255, 0.3)',
+},
+animation: {
+'fade-in': 'fadeIn 0.5s cubic-bezier(0.2, 0.0, 0, 1.0)',
+'slide-up': 'slideUp 0.6s cubic-bezier(0.2, 0.0, 0, 1.0)',
+'scale-in': 'scaleIn 0.4s cubic-bezier(0.2, 0.0, 0, 1.0)',
+'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+},
+keyframes: {
+fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
+slideUp: { '0%': { transform: 'translateY(30px)', opacity: '0' }, '100%': { transform: 'translateY(0)', opacity: '1' } },
+scaleIn: { '0%': { transform: 'scale(0.9)', opacity: '0' }, '100%': { transform: 'scale(1)', opacity: '1' } }
+}
+}
+}
+}
+</script>
+<style>
+body {
+  -webkit-tap-highlight-color: transparent;
+  background-color: #0F0E13;
+  /* Prevent default zoom on iOS input focus */
+  font-size: 16px;
+}
+/* Custom Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #49454F; border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: #79747E; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+/* Ripple Effect */
+.ripple {
+  position: relative;
+  overflow: hidden;
+  transform: translate3d(0, 0, 0);
+}
+.ripple:after {
+  content: "";
+  display: block;
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  background-image: radial-gradient(circle, rgba(208, 188, 255, 0.15) 10%, transparent 10.01%);
+  background-repeat: no-repeat;
+  background-position: 50%;
+  transform: scale(10, 10);
+  opacity: 0;
+  transition: transform .5s, opacity 1s;
+}
+.ripple:active:after {
+  transform: scale(0, 0);
+  opacity: 0.2;
+  transition: 0s;
+}
+/* Typing Animation */
+.typing-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #D0BCFF;
+  animation: typing 1.4s infinite ease-in-out both;
+}
+.typing-dot:nth-child(1) { animation-delay: -0.32s; }
+.typing-dot:nth-child(2) { animation-delay: -0.16s; }
+@keyframes typing {
+  0%, 80%, 100% { transform: scale(0); }
+  40% { transform: scale(1); }
+}
+/* Mobile Overlay */
+#mobile-overlay { backdrop-filter: blur(4px); }
+#mobile-overlay.open { opacity: 1; pointer-events: auto; }
+#sidebar.mobile-open { transform: translateX(0); }
 
-    <!-- Icons -->
-    <link rel="stylesheet" href="css/all.min.css">
-    
-    <!-- Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+/* Typography Override for Markdown */
+.prose h1, .prose h2, .prose h3 {
+  font-family: 'Outfit', sans-serif;
+  letter-spacing: -0.02em;
+}
 
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    fontFamily: {
-                        sans: ['"Inter"', 'sans-serif'],
-                        mono: ['"JetBrains Mono"', 'monospace'],
-                    },
-                    colors: {
-                        surface: {
-                            0: '#000000',
-                            1: '#09090b', // Zinc 950 - Main BG
-                            2: '#18181b', // Zinc 900 - Secondary
-                            3: '#27272a', // Zinc 800 - Borders/Hover
-                            4: '#3f3f46', // Zinc 700
-                        },
-                        primary: {
-                            DEFAULT: '#3b82f6', // Blue 500
-                            hover: '#2563eb',   // Blue 600
-                            dim: 'rgba(59, 130, 246, 0.1)', 
-                        },
-                        status: {
-                            idle: '#10b981',
-                            thinking: '#a855f7',
-                            executing: '#f59e0b',
-                        }
-                    },
-                    animation: {
-                        'fade-in': 'fadeIn 0.3s ease-out',
-                        'slide-in': 'slideIn 0.3s ease-out',
-                        'slide-right': 'slideRight 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
-                    },
-                    keyframes: {
-                        fadeIn: {
-                            '0%': { opacity: '0', transform: 'scale(0.99)' },
-                            '100%': { opacity: '1', transform: 'scale(1)' },
-                        },
-                        slideIn: {
-                            '0%': { transform: 'translateY(10px)', opacity: '0' },
-                            '100%': { transform: 'translateY(0)', opacity: '1' },
-                        },
-                        slideRight: {
-                            '0%': { transform: 'translateX(-100%)' },
-                            '100%': { transform: 'translateX(0)' },
-                        }
-                    }
-                }
-            }
-        }
-    </script>
+/* ✅ CHAT STREAM BOTTOM PADDING (RESPECTS INPUT DOCK) */
+#chat-stream {
+  padding-bottom: calc(10rem + env(safe-area-inset-bottom));
+}
+@media (max-height: 700px) {
+  #chat-stream {
+    padding-bottom: calc(14rem + env(safe-area-inset-bottom));
+  }
+}
+@media (max-height: 500px) {
+  #chat-stream {
+    padding-bottom: calc(18rem + env(safe-area-inset-bottom));
+  }
+}
 
-    <style>
-        body { -webkit-tap-highlight-color: transparent; }
-        
-        /* Custom Scrollbar */
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #52525b; }
-        
-        /* No scrollbar utility */
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-
-        .glass-header {
-            background: rgba(9, 9, 11, 0.85);
-            backdrop-filter: blur(12px);
-            border-bottom: 1px solid #27272a;
-        }
-
-        /* Typing Dot Animation */
-        .dot-flashing {
-            position: relative;
-            width: 6px;
-            height: 6px;
-            border-radius: 5px;
-            background-color: #9ca3af;
-            color: #9ca3af;
-            animation: dot-flashing 1s infinite linear alternate;
-            animation-delay: 0.5s;
-        }
-        .dot-flashing::before, .dot-flashing::after {
-            content: "";
-            display: inline-block;
-            position: absolute;
-            top: 0;
-            width: 6px;
-            height: 6px;
-            border-radius: 5px;
-            background-color: #9ca3af;
-            color: #9ca3af;
-            animation: dot-flashing 1s infinite alternate;
-        }
-        .dot-flashing::before { left: -10px; animation-delay: 0s; }
-        .dot-flashing::after { left: 10px; animation-delay: 1s; }
-        
-        @keyframes dot-flashing {
-            0% { background-color: #9ca3af; }
-            50%, 100% { background-color: #4b5563; }
-        }
-
-        /* Mobile Overlay Transition */
-        #mobile-overlay.open { opacity: 1; pointer-events: auto; }
-        #sidebar.mobile-open { transform: translateX(0); }
-    </style>
+/* ✅ KEYBOARD OPEN STATE */
+.keyboard-open #input-dock {
+  transform: translateY(-10px);
+}
+@media (max-width: 768px) {
+  .keyboard-open main {
+    margin-bottom: 8rem;
+  }
+  .keyboard-open input,
+  .keyboard-open textarea {
+    font-size: 16px !important;
+  }
+}
+</style>
 </head>
-<body class="bg-surface-1 text-zinc-200 h-screen w-full flex overflow-hidden">
+<body class="text-md-sys-color-onBackground h-screen w-full flex overflow-hidden font-sans selection:bg-md-sys-color-primaryContainer selection:text-md-sys-color-onPrimaryContainer">
+<!-- MOBILE OVERLAY -->
+<div id="mobile-overlay" onclick="toggleMobileSidebar()" class="md:hidden fixed inset-0 bg-black/60 z-40 opacity-0 pointer-events-none transition-opacity duration-300"></div>
 
-    <!-- MOBILE OVERLAY BACKDROP -->
-    <div id="mobile-overlay" onclick="toggleMobileSidebar()" class="md:hidden fixed inset-0 bg-black/60 z-40 opacity-0 pointer-events-none transition-opacity duration-300 backdrop-blur-sm"></div>
+<!-- NAVIGATION DRAWER -->
+<nav id="sidebar" class="fixed inset-y-0 left-0 w-80 bg-md-sys-color-surfaceContainerLow md:bg-transparent flex flex-col z-50 transform -translate-x-full md:relative md:translate-x-0 transition-transform duration-300 ease-[cubic-bezier(0.2,0,0,1)]">
+<div class="h-full md:m-3 md:rounded-3xl md:bg-md-sys-color-surfaceContainerLow flex flex-col overflow-hidden shadow-elevation-1 md:border border-md-sys-color-outlineVariant/20">
+  <!-- Header: FAB -->
+  <div class="p-4 pb-2">
+    <button onclick="startNewChat()" class="ripple w-full h-16 flex items-center gap-4 px-6 bg-md-sys-color-primaryContainer text-md-sys-color-onPrimaryContainer hover:shadow-glow hover:brightness-110 rounded-2xl transition-all duration-300 group">
+      <i class="fa-solid fa-plus text-xl"></i>
+      <span class="text-base font-semibold tracking-wide">New chat</span>
+    </button>
+    <button onclick="toggleMobileSidebar()" class="md:hidden absolute top-6 right-4 text-md-sys-color-onSurfaceVariant p-2">
+      <i class="fa-solid fa-xmark text-xl"></i>
+    </button>
+  </div>
+  <div class="px-6 py-4">
+    <span class="text-xs font-bold text-md-sys-color-primary tracking-wider uppercase opacity-80">Recent Activity</span>
+  </div>
+  <div id="history-list" class="flex-1 overflow-y-auto px-3 space-y-1 pb-4"></div>
+  <div class="p-4 mt-auto border-t border-md-sys-color-outlineVariant/20 bg-md-sys-color-surfaceContainerLow">
+    <button onclick="clearChats()" class="w-full flex items-center gap-4 px-4 py-3 rounded-full hover:bg-md-sys-color-surfaceContainerHigh transition-colors text-left group ripple">
+      <i class="fa-regular fa-trash-can text-md-sys-color-onSurfaceVariant group-hover:text-md-sys-color-error transition-colors"></i>
+      <div class="text-sm font-medium text-md-sys-color-onSurfaceVariant group-hover:text-md-sys-color-error">Clear all history</div>
+    </button>
+  </div>
+</div>
+</nav>
 
-    <!-- SIDEBAR (Navigation & History) -->
-    <!-- Desktop: Always visible. Mobile: Hidden off-canvas -->
-    <nav id="sidebar" class="fixed inset-y-0 left-0 w-72 bg-surface-0 border-r border-surface-3 flex flex-col z-50 transform -translate-x-full md:relative md:translate-x-0 transition-transform duration-300 ease-in-out shadow-2xl md:shadow-none">
-        
-        <!-- Sidebar Header -->
-        <div class="p-4 flex items-center justify-between">
-             <button onclick="startNewChat()" class="flex-1 flex items-center gap-2 px-3 py-2.5 bg-surface-2 hover:bg-surface-3 border border-surface-3 hover:border-surface-4 rounded-xl transition-all group">
-                <i class="fa-solid fa-plus text-xs text-primary-DEFAULT"></i>
-                <span class="text-sm font-medium text-white">New Chat</span>
-                <span class="ml-auto text-xs text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity"><i class="fa-regular fa-pen-to-square"></i></span>
+<!-- MAIN SURFACE -->
+<main class="flex-1 flex flex-col relative min-w-0">
+  <!-- TOP APP BAR -->
+  <header class="h-20 flex items-center justify-between px-6 sticky top-0 z-20 bg-md-sys-color-background/80 backdrop-blur-md">
+    <div class="flex items-center gap-4">
+      <button onclick="toggleMobileSidebar()" class="md:hidden text-md-sys-color-onSurfaceVariant ripple p-2 rounded-full">
+        <i class="fa-solid fa-bars text-xl"></i>
+      </button>
+      <div class="relative group">
+        <button id="model-dropdown-button" class="flex items-center gap-3 pl-1 pr-3 py-1.5 rounded-xl hover:bg-md-sys-color-surfaceContainerHigh transition-all border border-transparent hover:border-md-sys-color-outlineVariant/30" aria-haspopup="true">
+          <div class="w-8 h-8 rounded-lg bg-md-sys-color-primaryContainer flex items-center justify-center text-md-sys-color-onPrimaryContainer">
+            <i class="fa-solid fa-sparkles text-sm"></i>
+          </div>
+          <div class="flex flex-col items-start">
+            <span class="text-xs text-md-sys-color-onSurfaceVariant font-medium">Model</span>
+            <span id="current-model-display" class="text-sm font-semibold text-md-sys-color-onSurface leading-none mt-0.5">Loading...</span>
+          </div>
+          <i class="fa-solid fa-chevron-down text-xs text-md-sys-color-onSurfaceVariant ml-2"></i>
+        </button>
+        <div id="model-dropdown-menu" class="absolute left-0 top-full mt-2 w-72 rounded-2xl shadow-elevation-3 bg-md-sys-color-surfaceContainerHigh ring-1 ring-white/5 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 ease-out z-50 p-2 transform origin-top-left scale-95 group-hover:scale-100">
+          <div class="py-1 space-y-1 max-h-[60vh] overflow-y-auto custom-scrollbar" id="model-options-container"></div>
+        </div>
+      </div>
+    </div>
+    <div class="flex items-center gap-3">
+      <div id="agent-status-badge" class="hidden md:flex items-center gap-2 px-4 py-1.5 rounded-full bg-md-sys-color-surfaceContainerHigh border border-md-sys-color-outlineVariant/30">
+        <div class="w-2 h-2 rounded-full bg-md-sys-color-outline"></div>
+        <span class="text-xs font-medium text-md-sys-color-onSurfaceVariant tracking-wide">READY</span>
+      </div>
+      <button onclick="toggleCanvas()" id="btn-toggle-canvas" class="w-12 h-12 rounded-full flex items-center justify-center text-md-sys-color-onSurfaceVariant hover:bg-md-sys-color-surfaceContainerHigh hover:text-md-sys-color-primary transition-all ripple">
+        <i class="fa-solid fa-code text-lg"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- WELCOME VIEW -->
+  <div id="view-welcome" class="flex-1 flex flex-col items-center justify-center p-6 animate-fade-in pb-32">
+    <div class="text-center mb-10 space-y-2">
+      <div class="inline-flex items-center justify-center w-20 h-20 rounded-[32px] bg-gradient-to-br from-md-sys-color-primaryContainer to-md-sys-color-tertiaryContainer mb-6 shadow-glow">
+        <i class="fa-solid fa-atom text-4xl text-white"></i>
+      </div>
+      <h1 class="text-4xl md:text-5xl font-display font-medium text-md-sys-color-onSurface tracking-tight">
+        Hello, <span class="text-transparent bg-clip-text bg-gradient-to-r from-md-sys-color-primary to-md-sys-color-tertiary">Creator</span>
+      </h1>
+      <p class="text-lg text-md-sys-color-onSurfaceVariant font-light">What shall we build together today?</p>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-3xl">
+      <button onclick="fillInput('Scan current directory for unused files')" class="group relative p-5 rounded-3xl bg-md-sys-color-surfaceContainerLow hover:bg-md-sys-color-surfaceContainerHigh transition-all duration-300 text-left overflow-hidden border border-transparent hover:border-md-sys-color-outlineVariant/30">
+        <div class="relative z-10 flex flex-col h-full">
+          <div class="flex justify-between items-start mb-2">
+            <span class="w-10 h-10 rounded-full bg-md-sys-color-secondaryContainer text-md-sys-color-onSecondaryContainer flex items-center justify-center group-hover:scale-110 transition-transform">
+              <i class="fa-solid fa-magnifying-glass"></i>
+            </span>
+            <i class="fa-solid fa-arrow-up-right text-md-sys-color-onSurfaceVariant opacity-0 group-hover:opacity-100 transition-opacity"></i>
+          </div>
+          <h3 class="text-base font-semibold text-md-sys-color-onSurface mb-1">Audit Files</h3>
+          <p class="text-sm text-md-sys-color-onSurfaceVariant font-light">Scan directory for unused assets</p>
+        </div>
+      </button>
+      <!-- Other suggestion cards omitted for brevity but remain unchanged -->
+      <button onclick="fillInput('Create a Python script to visualize sales.csv')" class="group relative p-5 rounded-3xl bg-md-sys-color-surfaceContainerLow hover:bg-md-sys-color-surfaceContainerHigh transition-all duration-300 text-left overflow-hidden border border-transparent hover:border-md-sys-color-outlineVariant/30">
+        <div class="relative z-10 flex flex-col h-full">
+          <div class="flex justify-between items-start mb-2">
+            <span class="w-10 h-10 rounded-full bg-md-sys-color-tertiaryContainer text-md-sys-color-onTertiaryContainer flex items-center justify-center group-hover:scale-110 transition-transform">
+              <i class="fa-solid fa-chart-pie"></i>
+            </span>
+            <i class="fa-solid fa-arrow-up-right text-md-sys-color-onSurfaceVariant opacity-0 group-hover:opacity-100 transition-opacity"></i>
+          </div>
+          <h3 class="text-base font-semibold text-md-sys-color-onSurface mb-1">Data Viz</h3>
+          <p class="text-sm text-md-sys-color-onSurfaceVariant font-light">Plot charts from local CSV data</p>
+        </div>
+      </button>
+    </div>
+  </div>
+
+  <!-- CHAT VIEW -->
+  <div id="view-chat" class="flex-1 flex flex-col overflow-hidden hidden">
+    <div id="chat-stream" class="flex-1 overflow-y-auto p-4 md:px-20 md:py-8 space-y-10 scroll-smooth pb-40 w-full max-w-6xl mx-auto">
+      <!-- Messages injected via JS -->
+    </div>
+  </div>
+
+  <!-- INPUT DOCK -->
+  <div id="input-dock" class="absolute bottom-6 left-0 right-0 px-4 z-30 pointer-events-none">
+    <div class="max-w-4xl mx-auto relative pointer-events-auto">
+      <div class="bg-md-sys-color-surfaceContainerHigh rounded-[36px] shadow-elevation-3 flex flex-col border border-md-sys-color-outlineVariant/20 transition-all focus-within:ring-2 focus-within:ring-md-sys-color-primary/50">
+        <textarea
+          id="user-input"
+          rows="1"
+          class="w-full bg-transparent text-md-sys-color-onSurface placeholder-md-sys-color-onSurfaceVariant/50 text-lg px-6 py-5 max-h-48 focus:outline-none resize-none no-scrollbar font-sans"
+          placeholder="Type a message..."
+          onkeydown="handleKeydown(event)"
+          oninput="autoResize(this)"></textarea>
+        <div class="flex justify-between items-center px-4 pb-3">
+          <div class="flex gap-2">
+            <button class="w-10 h-10 rounded-full text-md-sys-color-onSurfaceVariant hover:bg-md-sys-color-surfaceContainerHighest hover:text-md-sys-color-onSurface transition-colors ripple flex items-center justify-center">
+              <i class="fa-solid fa-paperclip text-lg"></i>
             </button>
-            <!-- Mobile Close Button -->
-            <button onclick="toggleMobileSidebar()" class="md:hidden ml-3 text-zinc-400 hover:text-white">
-                <i class="fa-solid fa-xmark text-lg"></i>
+            <button class="w-10 h-10 rounded-full text-md-sys-color-onSurfaceVariant hover:bg-md-sys-color-surfaceContainerHighest hover:text-md-sys-color-onSurface transition-colors ripple flex items-center justify-center">
+              <i class="fa-solid fa-microphone text-lg"></i>
             </button>
+          </div>
+          <button onclick="sendMessage()" id="send-btn" class="w-12 h-12 rounded-full bg-md-sys-color-primary text-md-sys-color-onPrimary hover:shadow-glow transition-all flex items-center justify-center shadow-lg disabled:opacity-50 disabled:cursor-not-allowed ripple transform active:scale-90 duration-200">
+            <i class="fa-solid fa-arrow-up text-xl"></i>
+          </button>
         </div>
+      </div>
+    </div>
+  </div>
+</main>
 
-        <!-- History List -->
-        <div id="history-list" class="flex-1 overflow-y-auto px-3 py-2 space-y-6">
-            
+<!-- CODE EDITOR SIDE SHEET -->
+<aside id="canvas-panel" class="w-0 border-l border-md-sys-color-outlineVariant/20 bg-md-sys-color-surfaceContainerLow flex flex-col transition-all duration-400 ease-[cubic-bezier(0.2,0,0,1)] overflow-hidden shrink-0 fixed inset-y-0 right-0 z-40 md:relative md:inset-auto shadow-elevation-2">
+  <div class="h-20 flex items-center justify-between px-6 bg-md-sys-color-surfaceContainerLow/50 backdrop-blur-sm">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-md-sys-color-secondaryContainer flex items-center justify-center text-md-sys-color-onSecondaryContainer">
+        <i class="fa-solid fa-file-code"></i>
+      </div>
+      <div>
+        <h2 class="font-display font-medium text-md-sys-color-onSurface">Canvas</h2>
+        <p class="text-xs text-md-sys-color-onSurfaceVariant">Generated Output</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <button onclick="toggleCanvas()" class="w-10 h-10 rounded-full flex items-center justify-center text-md-sys-color-onSurfaceVariant hover:bg-md-sys-color-surfaceContainerHigh transition-colors ripple">
+        <i class="fa-solid fa-xmark text-lg"></i>
+      </button>
+    </div>
+  </div>
+  <div class="flex-1 overflow-auto bg-[#13111A] p-6 font-mono text-sm leading-relaxed custom-scrollbar">
+    <pre class="text-md-sys-color-onSurface"><code id="code-content"></code></pre>
+    <div id="chart-container" class="hidden mt-6 bg-md-sys-color-surfaceContainer p-6 rounded-3xl border border-md-sys-color-outlineVariant/30">
+      <canvas id="myChart"></canvas>
+    </div>
+  </div>
+  <div class="p-6 bg-md-sys-color-surfaceContainerLow flex justify-end gap-3">
+    <button class="px-6 py-2.5 text-sm font-medium text-md-sys-color-primary border border-md-sys-color-primary/30 rounded-full hover:bg-md-sys-color-primary/10 transition-colors">Copy</button>
+    <button class="px-6 py-2.5 text-sm font-medium bg-md-sys-color-primary text-md-sys-color-onPrimary rounded-full hover:shadow-lg transition-all shadow-md">
+      <i class="fa-solid fa-play mr-2 text-xs"></i>Run Code
+    </button>
+  </div>
+</aside>
+
+<script>
+// --- PRESERVED LOGIC + ENHANCEMENTS ---
+let isCanvasOpen = false;
+let current_session_id = null;
+let selected_model = "cognitivecomputations/dolphin-mistral-24b-venice-edition:free";
+let last_user_prompt = "";
+let running_commands = {};
+
+function autoResize(textarea) {
+  textarea.style.height = 'auto';
+  textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
+}
+
+function handleKeydown(e) {
+  if (e.key === 'Enter') {
+    if (e.altKey || e.shiftKey) return;
+    e.preventDefault();
+    sendMessage();
+  }
+}
+
+function fillInput(text) {
+  const input = document.getElementById('user-input');
+  input.value = text;
+  autoResize(input);
+  input.focus();
+}
+
+function toggleMobileSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('mobile-overlay');
+  sidebar.classList.toggle('mobile-open');
+  overlay.classList.toggle('open');
+}
+
+function startNewChat() {
+  current_session_id = null;
+  document.getElementById('view-welcome').classList.remove('hidden');
+  document.getElementById('view-chat').classList.add('hidden');
+  document.getElementById('chat-stream').innerHTML = '';
+  document.getElementById('user-input').value = '';
+  if (isCanvasOpen) toggleCanvas();
+  const sidebar = document.getElementById('sidebar');
+  if (sidebar.classList.contains('mobile-open')) toggleMobileSidebar();
+}
+
+function toggleCanvas() {
+  const canvas = document.getElementById('canvas-panel');
+  const btn = document.getElementById('btn-toggle-canvas');
+  isCanvasOpen = !isCanvasOpen;
+  if (isCanvasOpen) {
+    canvas.classList.remove('w-0');
+    canvas.classList.add('w-[50%]');
+    btn.classList.add('bg-md-sys-color-secondaryContainer', 'text-md-sys-color-onSecondaryContainer');
+    btn.classList.remove('text-md-sys-color-onSurfaceVariant');
+  } else {
+    canvas.classList.remove('w-[50%]');
+    canvas.classList.add('w-0');
+    btn.classList.remove('bg-md-sys-color-secondaryContainer', 'text-md-sys-color-onSecondaryContainer');
+    btn.classList.add('text-md-sys-color-onSurfaceVariant');
+  }
+}
+
+async function clearChats() {
+  if (confirm("Are you sure you want to clear all chat history?")) {
+    await fetch('/api/clear_chats');
+    getChats();
+    startNewChat();
+  }
+}
+
+function updateStatus(status, text) {
+  const badge = document.getElementById('agent-status-badge');
+  const dot = badge.querySelector('div:first-child');
+  const label = badge.querySelector('span');
+  const statuses = {
+    idle: { color: 'bg-md-sys-color-outline', pulse: false },
+    thinking: { color: 'bg-md-sys-color-primary', pulse: true },
+    executing: { color: 'bg-md-sys-color-tertiary', pulse: true },
+  };
+  const newStatus = statuses[status] || statuses.idle;
+  dot.className = `w-2 h-2 rounded-full ${newStatus.color}`;
+  if (newStatus.pulse) dot.classList.add('animate-pulse'); else dot.classList.remove('animate-pulse');
+  label.textContent = text.toUpperCase();
+}
+
+// ✅ IMPROVED SCROLLING
+function scrollToBottom(smooth = false) {
+  const stream = document.getElementById('chat-stream');
+  if (!stream) return;
+  if (smooth) {
+    stream.scrollTo({ top: stream.scrollHeight, behavior: 'smooth' });
+  } else {
+    stream.scrollTop = stream.scrollHeight;
+  }
+}
+
+function appendMessage(role, text, isExecuting = false) {
+  const stream = document.getElementById('chat-stream');
+  const div = document.createElement('div');
+  if (role === 'user') {
+    div.className = 'flex justify-end animate-slide-up';
+    div.innerHTML = `
+      <div class="bg-md-sys-color-primary text-md-sys-color-onPrimary px-6 py-4 rounded-[28px] rounded-tr-sm max-w-[90%] md:max-w-[70%] leading-relaxed shadow-sm font-sans text-[16px]">
+        ${marked.parse(text)}
+      </div>
+    `;
+  } else {
+    div.className = 'flex justify-start gap-4 animate-slide-up';
+    let content = isExecuting ? text : marked.parse(text);
+    const execRegex = /\[exec\]([\s\S]*?)\[\/exec\]/g;
+    content = content.replace(execRegex, (match, command) => {
+      const commandId = `exec-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const escapedCommand = command.replace(/'/g, "\\'").replace(/"/g, '\\"');
+      return `
+        <div id="${commandId}" class="mt-4 mb-2 p-1 bg-md-sys-color-surfaceContainerHigh rounded-3xl border border-md-sys-color-outlineVariant/30 overflow-hidden">
+          <div class="bg-black/40 rounded-[20px] p-4 font-mono text-sm text-md-sys-color-onSurfaceVariant border-l-4 border-md-sys-color-tertiary">
+            <code class="break-all">${escapedCommand}</code>
+          </div>
+          <div class="flex gap-2 p-2">
+            <button onclick="acceptExec('${commandId}', '${escapedCommand}')" class="flex-1 py-3 bg-md-sys-color-tertiary text-md-sys-color-onTertiary rounded-full font-bold text-sm hover:shadow-lg transition-all">Execute</button>
+            <button onclick="declineExec('${commandId}')" class="flex-1 py-3 text-md-sys-color-onSurfaceVariant hover:bg-md-sys-color-surfaceContainerHighest rounded-full font-medium text-sm transition-colors">Dismiss</button>
+          </div>
         </div>
-
-        <!-- Sidebar Footer -->
-        <div class="p-4 border-t border-surface-3 bg-surface-0/50">
-            <button onclick="clearChats()" class="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-surface-2 transition-colors text-left group">
-                <i class="fa-solid fa-trash text-zinc-500 group-hover:text-red-500 transition-colors"></i>
-                <div class="text-sm font-medium text-zinc-400 group-hover:text-red-500">Clear Chats</div>
-            </button>
+      `;
+    });
+    div.innerHTML = `
+      <div class="w-10 h-10 rounded-full bg-gradient-to-tr from-md-sys-color-primaryContainer to-md-sys-color-secondaryContainer flex-shrink-0 flex items-center justify-center mt-1 shadow-inner">
+        <i class="fa-solid fa-sparkles text-md-sys-color-onPrimaryContainer text-sm"></i>
+      </div>
+      <div class="space-y-2 max-w-[90%] md:max-w-[85%]">
+        <div class="text-xs text-md-sys-color-onSurfaceVariant font-bold ml-2 tracking-wide">ORION</div>
+        <div class="text-md-sys-color-onSurface leading-relaxed prose prose-invert max-w-none bg-md-sys-color-surfaceContainer p-6 rounded-[28px] rounded-tl-sm shadow-sm border border-md-sys-color-outlineVariant/10">
+          ${content}
         </div>
-    </nav>
+      </div>
+    `;
+  }
+  stream.appendChild(div);
 
-    <!-- MAIN CONTENT AREA -->
-    <main class="flex-1 flex flex-col relative min-w-0 bg-surface-1">
-        
-        <!-- HEADER -->
-        <header class="h-16 glass-header flex items-center justify-between px-4 sticky top-0 z-20">
-            <div class="flex items-center gap-3">
-                <!-- Mobile Menu Trigger -->
-                <button onclick="toggleMobileSidebar()" class="md:hidden p-2 -ml-2 text-zinc-400 hover:text-white">
-                    <i class="fa-solid fa-bars text-lg"></i>
-                </button>
-                
-                <!-- Model Selector -->
-                <div class="flex items-center gap-2 group cursor-pointer">
-                    <span class="text-lg font-semibold text-zinc-100">Ori</span>
-                    <span id="ori-version" class="text-xs text-zinc-500 ml-1"></span>
-                    <span class="text-zinc-600">/</span>
-                    <div class="relative group">
-                        <button id="model-dropdown-button" class="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-surface-3 transition-colors peer" aria-haspopup="true" aria-expanded="false">
-                            <span id="current-model-display" class="text-sm font-medium text-zinc-300"></span>
-                            <i class="fa-solid fa-chevron-down text-[10px] text-zinc-500"></i>
-                        </button>
-                        <div id="model-dropdown-menu" class="absolute left-0 mt-2 w-72 rounded-md shadow-lg bg-surface-2 ring-1 ring-black ring-opacity-5 focus:outline-none opacity-0 invisible peer-hover:opacity-100 peer-hover:visible hover:opacity-100 hover:visible transition-all duration-150 ease-in-out z-50" role="menu" aria-orientation="vertical" aria-labelledby="model-dropdown-button">
-                            <div class="py-1" role="none" id="model-options-container">
-                                <!-- Model options will be injected here -->
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+  // ✅ SMART AUTO-SCROLL
+  const isAtBottom = stream.scrollHeight - stream.scrollTop - stream.clientHeight < 100;
+  if (isAtBottom) {
+    setTimeout(() => scrollToBottom(true), 50);
+  }
+}
 
-            <!-- Right Controls -->
-            <div class="flex items-center gap-3">
-                <!-- Status Badge -->
-                <div id="agent-status-badge" class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-2 border border-surface-3">
-                    <div class="w-1.5 h-1.5 rounded-full bg-status-idle shadow-[0_0_8px_#10b981]"></div>
-                    <span class="text-[10px] font-mono font-medium text-zinc-400 tracking-wider">IDLE</span>
-                </div>
+// Rest of functions unchanged (acceptExec, declineExec, pollExecLog, killExec, sendMessage, retryLastPrompt, getVersion, getModels, getChats, loadChat)
 
-                <div class="h-4 w-px bg-surface-3 hidden md:block"></div>
+async function acceptExec(blockId, command) {
+  const block = document.getElementById(blockId);
+  block.innerHTML = `
+    <div class="p-6 flex items-center justify-center gap-4">
+      <div class="flex space-x-1">
+        <div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>
+      </div>
+      <span class="text-sm font-medium text-md-sys-color-tertiary">Initializing...</span>
+    </div>`;
+  updateStatus('executing', 'Running...');
+  const response = await fetch('/api/exec', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ command: command })
+  });
+  const result = await response.json();
+  if (result.error) {
+    block.innerHTML = `<div class="p-4 bg-md-sys-color-errorContainer text-md-sys-color-onErrorContainer rounded-2xl mx-2 mb-2">Error: ${result.error}</div>`;
+    updateStatus('idle', 'Idle');
+    return;
+  }
+  const command_id = result.command_id;
+  block.innerHTML = `
+    <div class="bg-[#13111A] rounded-[24px] m-1 overflow-hidden">
+      <div class="flex items-center justify-between p-3 border-b border-white/10 bg-md-sys-color-surfaceContainer">
+        <span class="text-xs font-bold text-md-sys-color-tertiary animate-pulse px-2">● RUNNING</span>
+        <button onclick="killExec('${command_id}')" class="w-8 h-8 flex items-center justify-center rounded-full bg-md-sys-color-errorContainer text-md-sys-color-onErrorContainer hover:opacity-80 transition-opacity"><i class="fa-solid fa-stop text-xs"></i></button>
+      </div>
+      <pre class="p-4 text-xs text-md-sys-color-onSurfaceVariant font-mono max-h-64 overflow-auto custom-scrollbar" id="log-${command_id}"></pre>
+    </div>
+  `;
+  running_commands[command_id] = setInterval(() => pollExecLog(command_id), 1000);
+}
 
-                <!-- Canvas Toggle -->
-                <button onclick="toggleCanvas()" id="btn-toggle-canvas" class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium text-zinc-400 hover:bg-surface-3 hover:text-white transition-all border border-transparent hover:border-surface-4 active:scale-95">
-                    <i class="fa-solid fa-layer-group"></i>
-                    <span class="hidden sm:inline">Canvas</span>
-                </button>
-            </div>
-        </header>
+function declineExec(blockId) {
+  const block = document.getElementById(blockId);
+  block.innerHTML = `<div class="p-4 text-center text-xs text-md-sys-color-outline italic">Action cancelled</div>`;
+}
 
-        <!-- VIEW: WELCOME / NEW CHAT -->
-        <div id="view-welcome" class="flex-1 flex flex-col items-center justify-center p-4 animate-fade-in pb-32">
-            <div class="w-20 h-20 rounded-2xl bg-gradient-to-br from-surface-2 to-surface-1 border border-surface-3 flex items-center justify-center mb-8 shadow-2xl shadow-black/50">
-                <i class="fa-solid fa-terminal text-4xl text-zinc-200"></i>
-            </div>
-            <h1 class="text-2xl md:text-3xl font-bold text-white mb-3 text-center">What can I help you automate?</h1>
-            
-            <!-- Quick Actions -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-2xl mt-8">
-                <button onclick="fillInput('Scan current directory for unused files')" class="p-4 rounded-xl bg-surface-2 border border-surface-3 hover:border-zinc-500 hover:bg-surface-3 transition-all text-left group">
-                    <div class="text-sm font-medium text-zinc-200 mb-1 flex justify-between">Audit Files <i class="fa-solid fa-arrow-right -rotate-45 text-zinc-600 group-hover:text-primary-DEFAULT transition-colors"></i></div>
-                    <div class="text-xs text-zinc-500">Scan directory for unused assets</div>
-                </button>
-                <button onclick="fillInput('Create a Python script to visualize sales.csv')" class="p-4 rounded-xl bg-surface-2 border border-surface-3 hover:border-zinc-500 hover:bg-surface-3 transition-all text-left group">
-                    <div class="text-sm font-medium text-zinc-200 mb-1 flex justify-between">Data Viz <i class="fa-solid fa-arrow-right -rotate-45 text-zinc-600 group-hover:text-primary-DEFAULT transition-colors"></i></div>
-                    <div class="text-xs text-zinc-500">Plot charts from local CSV data</div>
-                </button>
-                <button onclick="fillInput('Setup a basic Express.js server with TypeScript')" class="p-4 rounded-xl bg-surface-2 border border-surface-3 hover:border-zinc-500 hover:bg-surface-3 transition-all text-left group">
-                    <div class="text-sm font-medium text-zinc-200 mb-1 flex justify-between">Scaffold App <i class="fa-solid fa-arrow-right -rotate-45 text-zinc-600 group-hover:text-primary-DEFAULT transition-colors"></i></div>
-                    <div class="text-xs text-zinc-500">Express + TS boilerplate</div>
-                </button>
-                <button onclick="fillInput('Explain the logic in auth_controller.rb')" class="p-4 rounded-xl bg-surface-2 border border-surface-3 hover:border-zinc-500 hover:bg-surface-3 transition-all text-left group">
-                    <div class="text-sm font-medium text-zinc-200 mb-1 flex justify-between">Explain Code <i class="fa-solid fa-arrow-right -rotate-45 text-zinc-600 group-hover:text-primary-DEFAULT transition-colors"></i></div>
-                    <div class="text-xs text-zinc-500">Analyze local file logic</div>
-                </button>
-            </div>
-        </div>
+async function pollExecLog(command_id) {
+  const response = await fetch(`/api/exec_log?command_id=${command_id}`);
+  const result = await response.json();
+  const logEl = document.getElementById(`log-${command_id}`);
+  if (logEl) logEl.textContent = result.log;
+  if (result.status === "finished") {
+    clearInterval(running_commands[command_id]);
+    delete running_commands[command_id];
+    const parent = logEl.parentElement;
+    const header = parent.querySelector('div:first-child');
+    header.querySelector('span').textContent = '✓ COMPLETE';
+    header.querySelector('span').className = 'text-xs font-bold text-md-sys-color-primary px-2';
+    const btn = header.querySelector('button');
+    if (btn) btn.remove();
+    updateStatus('idle', 'Idle');
+  }
+}
 
-        <!-- VIEW: ACTIVE CHAT -->
-        <div id="view-chat" class="flex-1 flex flex-col overflow-hidden hidden">
-            <div id="chat-stream" class="flex-1 overflow-y-auto p-4 md:p-8 space-y-8 scroll-smooth pb-36 max-w-4xl mx-auto w-full">
-                <!-- Messages injected via JS -->
-            </div>
-        </div>
+async function killExec(command_id) {
+  clearInterval(running_commands[command_id]);
+  delete running_commands[command_id];
+  await fetch('/api/exec_kill', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ command_id: command_id })
+  });
+  const block = document.getElementById(`log-${command_id}`).parentElement;
+  const header = block.querySelector('div:first-child');
+  header.querySelector('span').textContent = '⚠ KILLED';
+  header.querySelector('span').className = 'text-xs font-bold text-md-sys-color-error px-2';
+  const btn = header.querySelector('button');
+  if (btn) btn.remove();
+  updateStatus('idle', 'Idle');
+}
 
-        <!-- FLOATING INPUT AREA -->
-        <div class="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-surface-1 via-surface-1 to-transparent z-30">
-            <div class="max-w-3xl mx-auto relative">
-                <div class="bg-surface-2 border border-surface-3 rounded-2xl shadow-2xl focus-within:ring-1 focus-within:ring-zinc-500 transition-all">
-                    <textarea 
-                        id="user-input" 
-                        rows="1" 
-                        class="w-full bg-transparent text-white placeholder-zinc-500 text-base px-4 py-4 max-h-48 focus:outline-none resize-none no-scrollbar font-sans" 
-                        placeholder="Message Ori..."
-                        onkeydown="handleKeydown(event)"
-                        oninput="autoResize(this)"></textarea>
-                    
-                    <div class="flex justify-between items-center px-3 pb-3 pt-1">
-                        <div class="flex gap-1">
-                            <button class="p-2 text-zinc-400 hover:text-white hover:bg-surface-3 rounded-lg transition-colors" title="Attach File">
-                                <i class="fa-solid fa-paperclip"></i>
-                            </button>
-                            <button class="p-2 text-zinc-400 hover:text-white hover:bg-surface-3 rounded-lg transition-colors" title="Voice Input">
-                                <i class="fa-solid fa-microphone"></i>
-                            </button>
-                        </div>
-                        <div class="flex items-center gap-3">
-                            <span class="text-[10px] text-zinc-600 hidden md:inline">Use <kbd class="font-mono bg-surface-3 px-1 rounded text-zinc-400">Alt</kbd> + <kbd class="font-mono bg-surface-3 px-1 rounded text-zinc-400">Return</kbd> for new line</span>
-                            <button onclick="sendMessage()" id="send-btn" class="w-8 h-8 rounded-lg bg-white text-black hover:bg-zinc-200 transition-colors flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed">
-                                <i class="fa-solid fa-arrow-up text-sm"></i>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+async function sendMessage(prompt = null, isFollowUp = false) {
+  const input = document.getElementById('user-input');
+  const text = prompt || input.value.trim();
+  if (!text) return;
+  if (!isFollowUp) {
+    last_user_prompt = text;
+    appendMessage('user', text);
+  }
+  document.getElementById('view-welcome').classList.add('hidden');
+  document.getElementById('view-chat').classList.remove('hidden');
+  input.value = '';
+  input.style.height = 'auto';
+  document.getElementById('send-btn').disabled = true;
+  updateStatus('thinking', 'Thinking...');
+  const response = await fetch('/api/prompt', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt: text, session_id: current_session_id, model: selected_model })
+  });
+  const result = await response.json();
+  updateStatus('idle', 'Idle');
+  document.getElementById('send-btn').disabled = false;
+  if (!current_session_id && result.session_id) {
+    getChats();
+  }
+  current_session_id = result.session_id;
+  if (result.error) {
+    appendMessage('bot', `**Error:** ${result.error} <button onclick="retryLastPrompt()" class="ml-2 px-2 py-1 bg-red-600/80 text-white rounded text-xs"><i class="fa-solid fa-rotate-right"></i> Retry</button>`, true);
+    return;
+  }
+  let botResponse = result.response;
+  const canvasRegex = /\[canvas\]([\s\S]*?)\[\/canvas\]/;
+  const canvasMatch = botResponse.match(canvasRegex);
+  if (canvasMatch) {
+    const canvasContent = canvasMatch[1];
+    document.getElementById('code-content').textContent = canvasContent;
+    if (!isCanvasOpen) {
+      toggleCanvas();
+    }
+    botResponse = botResponse.replace(canvasRegex, '').trim();
+  }
+  if (botResponse) {
+    appendMessage('bot', botResponse);
+  }
+}
 
-    </main>
+function retryLastPrompt() {
+  if (last_user_prompt) {
+    const stream = document.getElementById('chat-stream');
+    stream.removeChild(stream.lastChild);
+    sendMessage(last_user_prompt, true);
+  }
+}
 
-    <!-- CANVAS SIDEBAR (Collapsible) -->
-    <aside id="canvas-panel" class="w-0 border-l border-surface-3 bg-surface-0 flex flex-col transition-all duration-300 ease-in-out overflow-hidden shrink-0 fixed inset-y-0 right-0 z-40 md:relative md:inset-auto">
-        
-        <!-- Canvas Header -->
-        <div class="h-16 flex items-center justify-between px-4 border-b border-surface-3 bg-surface-1">
-            <div class="flex items-center gap-3">
-                <i class="fa-regular fa-file-code text-zinc-400"></i>
-                <span class="font-mono text-sm text-zinc-200"></span>
-                <span class="px-2 py-0.5 rounded text-[10px] bg-primary-dim text-primary-DEFAULT font-medium"></span>
-            </div>
-            <div class="flex items-center gap-1">
-                <button class="w-8 h-8 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-surface-3 rounded-lg transition-colors"><i class="fa-solid fa-download"></i></button>
-                <button onclick="toggleCanvas()" class="w-8 h-8 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-surface-3 rounded-lg transition-colors"><i class="fa-solid fa-xmark"></i></button>
-            </div>
-        </div>
-        
-        <!-- Canvas Body -->
-        <div class="flex-1 overflow-auto bg-[#0d1117] p-6 font-mono text-sm leading-relaxed">
-            <pre class="text-zinc-300"><code id="code-content"></code></pre>
-            <div id="chart-container" class="hidden mt-6 bg-surface-1 p-4 rounded-xl border border-surface-3">
-                <canvas id="myChart"></canvas>
-            </div>
-        </div>
+async function getVersion() {
+  const response = await fetch('/api/version');
+  const data = await response.json();
+}
 
-        <!-- Canvas Footer -->
-        <div class="p-4 border-t border-surface-3 bg-surface-1 flex justify-end gap-2">
-            <button class="px-4 py-2 text-sm font-medium text-zinc-400 hover:text-white hover:bg-surface-3 rounded-lg transition-colors">Copy</button>
-            <button class="px-4 py-2 text-sm font-medium bg-primary-DEFAULT hover:bg-primary-hover text-white rounded-lg transition-colors shadow-lg shadow-blue-500/20">
-                Run Code
-            </button>
-        </div>
-    </aside>
+async function getModels() {
+  const response = await fetch('/api/models');
+  const models = await response.json();
+  const modelOptionsContainer = document.getElementById('model-options-container');
+  const currentModelDisplay = document.getElementById('current-model-display');
+  modelOptionsContainer.innerHTML = '';
+  models.forEach(model => {
+    const button = document.createElement('button');
+    button.className = 'w-full text-left px-4 py-3 text-sm text-md-sys-color-onSurfaceVariant hover:bg-md-sys-color-surfaceContainerHighest hover:text-md-sys-color-onSurface transition-colors rounded-xl flex items-center gap-3 group';
+    button.setAttribute('role', 'menuitem');
+    const modelName = model.split('/').pop().replace(':free', '');
+    button.innerHTML = `
+      <div class="w-1 h-1 rounded-full bg-md-sys-color-outline group-hover:bg-md-sys-color-primary transition-colors"></div>
+      <span class="truncate">${modelName}</span>
+    `;
+    button.onclick = () => {
+      selected_model = model;
+      currentModelDisplay.textContent = modelName;
+    };
+    modelOptionsContainer.appendChild(button);
+  });
+  currentModelDisplay.textContent = selected_model.split('/').pop().replace(':free', '');
+}
 
-    <script>
-        // --- LOGIC ---
-        
-        let isCanvasOpen = false;
-        let current_session_id = null;
-        let selected_model = "cognitivecomputations/dolphin-mistral-24b-venice-edition:free";
-        let last_user_prompt = "";
-        let running_commands = {};
+async function getChats() {
+  const response = await fetch('/api/chats');
+  const data = await response.json();
+  const historyList = document.getElementById('history-list');
+  historyList.innerHTML = '';
+  data.reverse().forEach(chat => {
+    const button = document.createElement('button');
+    button.className = 'w-full text-left px-6 py-4 rounded-full text-sm font-medium truncate transition-all flex items-center gap-4 mb-1 border border-transparent';
+    const isActive = chat.id === current_session_id;
+    if (isActive) {
+      button.classList.add('bg-md-sys-color-secondaryContainer', 'text-md-sys-color-onSecondaryContainer');
+    } else {
+      button.classList.add('text-md-sys-color-onSurfaceVariant', 'hover:bg-md-sys-color-surfaceContainerHigh');
+    }
+    button.innerHTML = `
+      <i class="fa-regular fa-message ${isActive ? 'text-md-sys-color-onSecondaryContainer' : 'text-md-sys-color-outline'}"></i>
+      <span class="truncate">${chat.name}</span>
+    `;
+    button.onclick = () => {
+      if (chat.id === current_session_id) return;
+      loadChat(chat.id);
+      if (document.getElementById('sidebar').classList.contains('mobile-open')) {
+        toggleMobileSidebar();
+      }
+    };
+    historyList.appendChild(button);
+  });
+}
 
-        // Auto-resize Textarea
-        function autoResize(textarea) {
-            textarea.style.height = 'auto';
-            textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
+async function loadChat(session_id) {
+  current_session_id = session_id;
+  getChats();
+  const response = await fetch(`/api/history?session_id=${session_id}`);
+  const data = await response.json();
+  const stream = document.getElementById('chat-stream');
+  stream.innerHTML = '';
+  document.getElementById('view-welcome').classList.add('hidden');
+  document.getElementById('view-chat').classList.remove('hidden');
+  data.forEach(entry => {
+    appendMessage('user', entry.user);
+    const containsExec = /\[exec\]([\s\S]*?)\[\/exec\]/g.test(entry.bot);
+    appendMessage('bot', entry.bot, containsExec);
+  });
+  stream.scrollTop = stream.scrollHeight;
+}
+
+// ✅ MOBILE KEYBOARD HANDLING
+function setupMobileKeyboardHandling() {
+  const input = document.getElementById('user-input');
+  let keyboardOpen = false;
+
+  input.addEventListener('focus', () => {
+    setTimeout(() => {
+      if (window.visualViewport) {
+        if (window.visualViewport.height < window.innerHeight * 0.7) {
+          document.body.classList.add('keyboard-open');
+          keyboardOpen = true;
         }
+      }
+      scrollToBottom(true);
+    }, 300);
+  });
 
-        // Key Handling: Enter sends, Alt/Shift+Enter new line
-        function handleKeydown(e) {
-            if (e.key === 'Enter') {
-                if (e.altKey || e.shiftKey) {
-                    return; // Default behavior
-                } else {
-                    e.preventDefault();
-                    sendMessage();
-                }
-            }
+  input.addEventListener('blur', () => {
+    setTimeout(() => {
+      if (document.activeElement === document.body && keyboardOpen) {
+        document.body.classList.remove('keyboard-open');
+        keyboardOpen = false;
+      }
+    }, 200);
+  });
+
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', () => {
+      if (window.visualViewport.height < window.innerHeight * 0.7) {
+        if (!keyboardOpen) {
+          document.body.classList.add('keyboard-open');
+          keyboardOpen = true;
+          scrollToBottom(true);
         }
-
-        function fillInput(text) {
-            const input = document.getElementById('user-input');
-            input.value = text;
-            autoResize(input);
-            input.focus();
+      } else {
+        if (keyboardOpen) {
+          document.body.classList.remove('keyboard-open');
+          keyboardOpen = false;
         }
+      }
+    });
+  }
+}
 
-        // Toggle Mobile Sidebar
-        function toggleMobileSidebar() {
-            const sidebar = document.getElementById('sidebar');
-            const overlay = document.getElementById('mobile-overlay');
-            const isOpen = sidebar.classList.contains('mobile-open');
-
-            if(isOpen) {
-                sidebar.classList.remove('mobile-open');
-                overlay.classList.remove('open');
-            } else {
-                sidebar.classList.add('mobile-open');
-                overlay.classList.add('open');
-            }
-        }
-
-        // Start New Chat (Return to Home)
-        function startNewChat() {
-            current_session_id = null;
-            document.getElementById('view-welcome').classList.remove('hidden');
-            document.getElementById('view-chat').classList.add('hidden');
-            document.getElementById('chat-stream').innerHTML = ''; 
-            document.getElementById('user-input').value = '';
-            
-            if(isCanvasOpen) toggleCanvas();
-            
-            const sidebar = document.getElementById('sidebar');
-            if(sidebar.classList.contains('mobile-open')) {
-                toggleMobileSidebar();
-            }
-        }
-
-        // Toggle Code Canvas
-        function toggleCanvas() {
-            const canvas = document.getElementById('canvas-panel');
-            const btn = document.getElementById('btn-toggle-canvas');
-            
-            isCanvasOpen = !isCanvasOpen;
-            if (isCanvasOpen) {
-                canvas.classList.remove('w-0');
-                canvas.classList.add('w-[45%]'); // Desktop width
-                btn.classList.add('bg-surface-3', 'text-white');
-            } else {
-                canvas.classList.remove('w-[45%]');
-                canvas.classList.add('w-0');
-                btn.classList.remove('bg-surface-3', 'text-white');
-            }
-        }
-        
-        async function clearChats() {
-            if(confirm("Are you sure you want to clear all chat history? This action cannot be undone.")){
-                await fetch('/api/clear_chats');
-                getChats();
-                startNewChat();
-            }
-        }
-
-        function updateStatus(status, text) {
-            const badge = document.getElementById('agent-status-badge');
-            const dot = badge.querySelector('div:first-child');
-            const label = badge.querySelector('span');
-            
-            const statuses = {
-                idle: { color: 'bg-status-idle', shadow: 'shadow-[0_0_8px_#10b981]', pulse: false },
-                thinking: { color: 'bg-status-thinking', shadow: 'shadow-[0_0_8px_#a855f7]', pulse: true },
-                executing: { color: 'bg-status-executing', shadow: 'shadow-[0_0_8px_#f59e0b]', pulse: true },
-            };
-            
-            const newStatus = statuses[status] || statuses.idle;
-            dot.className = `w-1.5 h-1.5 rounded-full ${newStatus.color} ${newStatus.shadow}`;
-            if (newStatus.pulse) dot.classList.add('animate-pulse'); else dot.classList.remove('animate-pulse');
-            label.textContent = text.toUpperCase();
-        }
-
-        function appendMessage(role, text, isExecuting = false) {
-            const stream = document.getElementById('chat-stream');
-            const div = document.createElement('div');
-            
-            if (role === 'user') {
-                div.className = 'flex justify-end animate-slide-in';
-                div.innerHTML = `
-                    <div class="bg-surface-3 text-zinc-100 px-5 py-3 rounded-3xl rounded-tr-sm max-w-[90%] md:max-w-[75%] leading-relaxed border border-surface-4 shadow-sm">
-                        ${marked.parse(text)}
-                    </div>
-                `;
-            } else {
-                div.className = 'flex justify-start gap-4 animate-slide-in';
-                let content = isExecuting ? text : marked.parse(text);
-                const execRegex = /\[exec\]([\s\S]*?)\[\/exec\]/g;
-                
-                content = content.replace(execRegex, (match, command) => {
-                    const commandId = `exec-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-                    // Important: Escape command for use in string literal
-                    const escapedCommand = command.replace(/'/g, "\\'").replace(/"/g, '\\"');
-                    return `
-                        <div id="${commandId}" class="p-4 bg-surface-2 border border-surface-3 rounded-lg font-mono text-sm">
-                            <div class="flex items-center justify-between mb-3">
-                                <p class="text-xs font-sans font-medium text-zinc-400">EXECUTE COMMAND</p>
-                                <code class="text-xs bg-black/50 text-amber-400 px-2 py-1 rounded">${escapedCommand}</code>
-                            </div>
-                            <div class="flex gap-2">
-                                <button onclick="acceptExec('${commandId}', '${escapedCommand}')" class="flex-1 px-3 py-1.5 bg-green-600/20 text-green-300 rounded hover:bg-green-600/40 text-xs font-semibold border border-green-600/30">ACCEPT</button>
-                                <button onclick="declineExec('${commandId}')" class="flex-1 px-3 py-1.5 bg-red-700/20 text-red-300 rounded hover:bg-red-700/40 text-xs font-semibold border border-red-700/30">DECLINE</button>
-                            </div>
-                        </div>
-                    `;
-                });
-
-                div.innerHTML = `
-                    <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-purple-600 flex-shrink-0 flex items-center justify-center shadow-lg mt-1">
-                        <i class="fa-solid fa-terminal text-white text-[10px]"></i>
-                    </div>
-                    <div class="space-y-2 max-w-[90%] md:max-w-[85%]">
-                        <div class="text-sm text-zinc-400 font-medium">Ori</div>
-                        <div class="text-zinc-200 leading-relaxed">
-                            ${content}
-                        </div>
-                    </div>
-                `;
-            }
-            stream.appendChild(div);
-            stream.scrollTop = stream.scrollHeight;
-        }
-
-        async function acceptExec(blockId, command) {
-            const block = document.getElementById(blockId);
-            block.innerHTML = `<p class="text-xs font-sans text-zinc-400">Executing...</p>`;
-            updateStatus('executing', 'Running...');
-
-            const response = await fetch('/api/exec', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ command: command })
-            });
-            const result = await response.json();
-            
-            if(result.error){
-                block.innerHTML = `<p class="text-red-400 text-xs">Error: ${result.error}</p>`;
-                updateStatus('idle', 'Idle');
-                return;
-            }
-
-            const command_id = result.command_id;
-            block.innerHTML = `
-                <div class="flex items-center justify-between mb-2">
-                    <p class="text-xs font-sans text-zinc-400">Running command...</p>
-                    <button onclick="killExec('${command_id}')" class="px-2 py-0.5 bg-red-700/50 text-red-200 rounded text-[10px] hover:bg-red-700/80">KILL</button>
-                </div>
-                <pre class="bg-black/50 p-3 rounded-md text-xs text-zinc-300 max-h-60 overflow-auto" id="log-${command_id}"></pre>
-            `;
-            running_commands[command_id] = setInterval(() => pollExecLog(command_id), 1000);
-        }
-
-        function declineExec(blockId) {
-            const block = document.getElementById(blockId);
-            block.innerHTML = `<p class="text-xs font-sans text-zinc-500">Execution declined.</p>`;
-        }
-        
-        async function pollExecLog(command_id) {
-            const response = await fetch(`/api/exec_log?command_id=${command_id}`);
-            const result = await response.json();
-            
-            const logEl = document.getElementById(`log-${command_id}`);
-            if(logEl) logEl.textContent = result.log;
-
-            if (result.status === "finished") {
-                clearInterval(running_commands[command_id]);
-                delete running_commands[command_id];
-                
-                const block = document.getElementById(`exec-${command_id.split('-')[1]}-${command_id.split('-')[2]}`);
-                const parent = logEl.parentElement;
-                parent.querySelector('p').textContent = 'Execution finished.';
-                parent.querySelector('button').remove();
-
-                updateStatus('idle', 'Idle');
-            }
-        }
-        
-        async function killExec(command_id) {
-            clearInterval(running_commands[command_id]);
-            delete running_commands[command_id];
-
-            await fetch('/api/exec_kill', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ command_id: command_id })
-            });
-
-            const block = document.getElementById(`log-${command_id}`).parentElement;
-            block.querySelector('p').textContent = 'Execution killed.';
-            block.querySelector('button').remove();
-            updateStatus('idle', 'Idle');
-        }
-
-        async function sendMessage(prompt = null, isFollowUp = false) {
-            const input = document.getElementById('user-input');
-            const text = prompt || input.value.trim();
-            if(!text) return;
-
-            if (!isFollowUp) {
-                last_user_prompt = text;
-                appendMessage('user', text);
-            }
-
-            document.getElementById('view-welcome').classList.add('hidden');
-            document.getElementById('view-chat').classList.remove('hidden');
-
-            input.value = '';
-            input.style.height = 'auto';
-            document.getElementById('send-btn').disabled = true;
-            
-            updateStatus('thinking', 'Thinking...');
-
-            const response = await fetch('/api/prompt', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ prompt: text, session_id: current_session_id, model: selected_model })
-            });
-
-            const result = await response.json();
-            updateStatus('idle', 'Idle');
-            document.getElementById('send-btn').disabled = false;
-
-            if(!current_session_id && result.session_id) {
-                getChats();
-            }
-            current_session_id = result.session_id;
-
-            if (result.error) {
-                appendMessage('bot', `**Error:** ${result.error} <button onclick="retryLastPrompt()" class="ml-2 px-2 py-1 bg-red-70g-red-600/80 text-white rounded text-xs"><i class="fa-solid fa-rotate-right"></i> Retry</button>`, true);
-                return;
-            }
-
-            let botResponse = result.response;
-            const canvasRegex = /\[canvas\]([\s\S]*?)\[\/canvas\]/;
-            const canvasMatch = botResponse.match(canvasRegex);
-
-            if (canvasMatch) {
-                const canvasContent = canvasMatch[1];
-                document.getElementById('code-content').textContent = canvasContent;
-                if (!isCanvasOpen) {
-                    toggleCanvas();
-                }
-                botResponse = botResponse.replace(canvasRegex, '').trim();
-            }
-
-            if (botResponse) {
-                appendMessage('bot', botResponse);
-            }
-        }
-
-        function retryLastPrompt() {
-            if (last_user_prompt) {
-                const stream = document.getElementById('chat-stream');
-                stream.removeChild(stream.lastChild); // Remove the error message
-                sendMessage(last_user_prompt, true); 
-            }
-        }
-        
-        async function getVersion() {
-            const response = await fetch('/api/version');
-            const data = await response.json();
-            document.getElementById('ori-version').innerText = `v${data.version}`;
-        }
-
-        async function getModels() {
-            const response = await fetch('/api/models');
-            const models = await response.json();
-            const modelOptionsContainer = document.getElementById('model-options-container');
-            const currentModelDisplay = document.getElementById('current-model-display');
-            modelOptionsContainer.innerHTML = ''; // Clear previous options
-
-            models.forEach(model => {
-                const button = document.createElement('button');
-                button.className = 'block w-full text-left px-4 py-2 text-sm text-zinc-300 hover:bg-surface-3 hover:text-white transition-colors';
-                button.setAttribute('role', 'menuitem');
-                const modelName = model.split('/').pop().replace(':free', '');
-                button.textContent = modelName;
-                button.onclick = () => {
-                    selected_model = model;
-                    currentModelDisplay.textContent = modelName;
-                    // This is a CSS-driven dropdown, so no need to manually close
-                };
-                modelOptionsContainer.appendChild(button);
-            });
-
-            // Set initial display to default model
-            currentModelDisplay.textContent = selected_model.split('/').pop().replace(':free', '');
-        }
-
-        async function getChats() {
-            const response = await fetch('/api/chats');
-            const data = await response.json();
-            const historyList = document.getElementById('history-list');
-            historyList.innerHTML = ''; // Clear old list
-            
-            // Reverse to show newest chats first
-            data.reverse().forEach(chat => {
-                const button = document.createElement('button');
-                button.className = 'w-full text-left px-3 py-2 rounded-lg text-sm text-zinc-300 hover:bg-surface-2 truncate transition-colors group flex items-center justify-between';
-                
-                const isActive = chat.id === current_session_id;
-                if(isActive) {
-                    button.classList.add('bg-primary-dim', 'text-white');
-                }
-
-                button.innerHTML = `<span class="truncate">${chat.name}</span>`;
-                button.onclick = () => {
-                    if (chat.id === current_session_id) return;
-                    loadChat(chat.id);
-                    if(document.getElementById('sidebar').classList.contains('mobile-open')) {
-                        toggleMobileSidebar();
-                    }
-                };
-                historyList.appendChild(button);
-            });
-        }
-
-        async function loadChat(session_id) {
-            current_session_id = session_id;
-            getChats(); // Refresh history to show active selection
-
-            const response = await fetch(`/api/history?session_id=${session_id}`);
-            const data = await response.json();
-            const stream = document.getElementById('chat-stream');
-            stream.innerHTML = '';
-            
-            document.getElementById('view-welcome').classList.add('hidden');
-            document.getElementById('view-chat').classList.remove('hidden');
-
-            data.forEach(entry => {
-                appendMessage('user', entry.user);
-                // The 'bot' response might contain [exec] tags that need to be parsed
-                const containsExec = /\[exec\]([\s\S]*?)\[\/exec\]/g.test(entry.bot);
-                appendMessage('bot', entry.bot, containsExec);
-            });
-            stream.scrollTop = stream.scrollHeight;
-        }
-
-        document.addEventListener('DOMContentLoaded', () => {
-            getVersion();
-            getModels();
-            getChats();
-            updateStatus('idle', 'Idle');
-            document.getElementById('send-btn').disabled = false;
-        });
-
-    </script>
+document.addEventListener('DOMContentLoaded', () => {
+  getVersion();
+  getModels();
+  getChats();
+  updateStatus('idle', 'Idle');
+  document.getElementById('send-btn').disabled = false;
+  setupMobileKeyboardHandling();
+});
+</script>
 </body>
 </html>

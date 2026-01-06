@@ -15,10 +15,17 @@
 #include <chrono>
 #include <atomic>
 #include <csignal>
+#include <fcntl.h>
+#include <sys/wait.h>
 
 static std::atomic<bool> keep_running{true};
+std::atomic<bool> OriAssistant::interrupted_flag{false};
 
-void run_spinner() {
+void sigint_handler(int signum) {
+    OriAssistant::interrupted_flag = true;
+}
+
+void run_spinner(const std::string& message) {
     const std::vector<std::string> frames = {
         "⠾", "⠽", "⠻", "⠯", "⠷"
     };
@@ -26,7 +33,7 @@ void run_spinner() {
     size_t i = 0;
     std::cout << "\x1b[?25l"; 
     while (keep_running) {
-        std::cout << "\r" << frames[i] << " loading..." << std::flush;
+        std::cout << "\r" << frames[i] << " " << message << std::flush;
         i = (i + 1) % frames.size();
         std::this_thread::sleep_for(std::chrono::milliseconds(1000 / fps));
     }
@@ -194,6 +201,16 @@ std::string OriAssistant::readInput() {
         } else if (c == 0x05) { // Ctrl-E -> end
             cursor = buffer.size();
             refresh();
+        } else if (c == 0x06) { // Ctrl-F
+            show_command_log = !show_command_log;
+            if (!config.no_clear) {
+                std::system("clear");
+            }
+            showBanner();
+            if (show_command_log) {
+                displayCommandLog();
+            }
+            refresh();
         } else if (c == 0x15) { // Ctrl-U -> delete to start
             buffer.erase(0, cursor);
             cursor = 0;
@@ -208,7 +225,13 @@ std::string OriAssistant::readInput() {
             refresh();
         } else if (c == 0x1b) { // ESC sequences (arrows / Alt+key word movement)
             char c2 = 0;
-            if (read(STDIN_FILENO, &c2, 1) <= 0) continue;
+            if (read(STDIN_FILENO, &c2, 1) <= 0) { // Lone ESC
+                buffer.clear();
+                cursor = 0;
+                printf("\n");
+                tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios);
+                return std::string();
+            }
 
             // Handle CSI sequences (arrow keys, Home/End, etc.)
             if (c2 == '[') {
@@ -339,43 +362,11 @@ std::string OpenRouterAPI::getMotherboardFingerprint() {
     return fingerprint;
 }
 
-// Encryption was removed to simplify key handling. Keep no-op functions if referenced elsewhere.
-std::string OpenRouterAPI::encrypt(const std::string& data, const std::string& key) {
-    (void)key;
-    return data;
-}
-
-std::string OpenRouterAPI::decrypt(const std::string& data, const std::string& key) {
-    (void)key;
-    return data;
-}
-
 void OpenRouterAPI::setSystemPrompt(const std::string& prompt) {
     // Directly set the system prompt provided by the caller. The prompt should
     // be a plain-text instruction (no external file loading).
     conversation_history.clear();
     conversation_history.push_back({"system", prompt});
-}
-
-std::string OpenRouterAPI::buildEncryptionKey() {
-    std::string key;
-    // username
-    const char* user = std::getenv("USER");
-    if (user && std::strlen(user) > 0) key += user;
-    // hostname
-    char hostbuf[256];
-    if (gethostname(hostbuf, sizeof(hostbuf)) == 0) {
-        if (!key.empty()) key += ":";
-        key += hostbuf;
-    }
-    // machine-id / fingerprint
-    std::string fingerprint = getMotherboardFingerprint();
-    if (!fingerprint.empty()) {
-        if (!key.empty()) key += ":";
-        key += fingerprint;
-    }
-
-    return key;
 }
 
 bool OpenRouterAPI::loadApiKey() {
@@ -493,12 +484,54 @@ std::string OpenRouterAPI::sendQuery(const std::string& prompt) {
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_data);
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "OriAssistant/1.0");
     
-    // Perform the request
-    keep_running = true;
-    std::thread spinner_thread(run_spinner);
-    CURLcode res = curl_easy_perform(curl);
-    keep_running = false;
-    spinner_thread.join();
+    // Perform the request with retry logic
+    const int max_retries = 5;
+    const int retry_delay_seconds = 2;
+    CURLcode res = CURLE_OK;
+    long http_code = 0;
+
+    for (int attempt = 0; attempt < max_retries; ++attempt) {
+        std::string spinner_message = "loading...";
+        if (attempt > 0) {
+            std::string reason;
+            if (res != CURLE_OK) {
+                reason = curl_easy_strerror(res);
+            } else if (http_code == 429) {
+                reason = "rate limited";
+            } else {
+                reason = "connection failed";
+            }
+            spinner_message = reason + ", retrying...";
+            std::this_thread::sleep_for(std::chrono::seconds(retry_delay_seconds));
+        }
+
+        response_data.clear();
+        keep_running = true;
+        std::thread spinner_thread(run_spinner, spinner_message);
+        res = curl_easy_perform(curl);
+        keep_running = false;
+        spinner_thread.join();
+
+        if (res != CURLE_OK) {
+            if (res == CURLE_COULDNT_CONNECT || res == CURLE_COULDNT_RESOLVE_HOST || res == CURLE_OPERATION_TIMEDOUT) {
+                if (attempt < max_retries - 1) continue; // Retry on specific connection errors
+            }
+            break; // Don't retry on other curl errors or on last attempt
+        }
+
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+
+        if (http_code >= 200 && http_code < 300) {
+            break; // Success
+        }
+
+        if (http_code == 429) { // Rate limit
+            if (attempt < max_retries - 1) continue; // Retry
+        }
+
+        // For any other http_code, break and fail.
+        break;
+    }
     
     // Clean up
     curl_slist_free_all(headers);
@@ -564,12 +597,7 @@ std::string OpenRouterAPI::sendQuery(const std::string& prompt) {
 #endif
 }
 
-std::string OpenRouterAPI::sendComplexQuery(const std::string& prompt) {
-    // This is a placeholder implementation for complex queries
-    // In a real implementation, this would make an HTTP request to OpenRouter API
-    // with Google Gemini 2.0 (flash experimental) model
-    return "Complex response from gemini-2.0-flash-exp for prompt: " + prompt;
-}
+
 
 #ifdef CURL_FOUND
 static bool curl_initialized = false;
@@ -593,6 +621,7 @@ OriAssistant::~OriAssistant() {
 }
 
 bool OriAssistant::initialize() {
+    std::signal(SIGINT, sigint_handler);
     // Create config directory if it doesn't exist
     const char* home_dir = std::getenv("HOME");
     if (home_dir != nullptr) {
@@ -623,22 +652,7 @@ void OriAssistant::run() {
     // Save cursor position for future reference
     printf("\033[s");
     
-    if (!config.no_banner) {
-        // Display banner
-        std::cout << BLUE << R"(
-    ███████    ███████████   █████            ███████████ █████  █████ █████
-  ███▒▒▒▒▒███ ▒▒███▒▒▒▒▒███ ▒▒███            ▒█▒▒▒███▒▒▒█▒▒███  ▒▒███ ▒▒███ 
- ███     ▒▒███ ▒███    ▒███  ▒███            ▒   ▒███  ▒  ▒███   ▒███  ▒███ 
-▒███      ▒███ ▒██████████   ▒███  ██████████    ▒███     ▒███   ▒███  ▒███ 
-▒███      ▒███ ▒███▒▒▒▒▒███  ▒███ ▒▒▒▒▒▒▒▒▒▒     ▒███     ▒███   ▒███  ▒███ 
-▒▒███     ███  ▒███    ▒███  ▒███                ▒███     ▒███   ▒███  ▒███ 
- ▒▒▒███████▒   █████   █████ █████               █████    ▒▒████████   █████
-   ▒▒▒▒▒▒▒    ▒▒▒▒▒   ▒▒▒▒▒ ▒▒▒▒▒               ▒▒▒▒▒      ▒▒▒▒▒▒▒▒   ▒▒▒▒▒
-)" << RESET << std::endl;
-        std::cout << BOLD << BLUE << "ORI Terminal Assistant v1.1.0" << RESET << "\n";
-        // Single newline after instructions to avoid empty-space gap
-        std::cout << "Type '/help' for available commands or '/quit' to exit.\n";
-    }
+    showBanner();
     
     // Save cursor position after banner (for potential future use)
     printf("\033[s");
@@ -657,6 +671,20 @@ void OriAssistant::run() {
                 showHelp();
             } else if (input == "/clear") {
                 std::system("clear");
+            } else if (input.rfind("/cat ", 0) == 0) {
+                std::string file_path = input.substr(5);
+                std::ifstream file(file_path);
+                if (file.is_open()) {
+                    std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+                    file.close();
+                    std::cout << content << std::endl;
+                    pre_prompt_context += "The user has read the file '" + file_path + "' with the following content:\n---\n" + content + "\n---";
+                } else {
+                    std::cout << RED << "Error: could not open file " << file_path << RESET << std::endl;
+                }
+            } else if (input.rfind("/exec ", 0) == 0) {
+                std::string command = input.substr(6);
+                handleCommandExecution(command, true, false);
             } else {
                 std::cout << RED << "Unknown command: " << input << RESET << std::endl;
             }
@@ -664,6 +692,38 @@ void OriAssistant::run() {
             processSingleRequest(input, false); // Interactive mode, no auto-confirm
         }
     }
+}
+
+void OriAssistant::showBanner() {
+    if (!config.no_banner) {
+        // Display banner
+        std::cout << BLUE << R"(
+    ███████    ███████████   █████            ███████████ █████  █████ █████
+  ███▒▒▒▒▒███ ▒▒███▒▒▒▒▒███ ▒▒███            ▒█▒▒▒███▒▒▒█▒▒███  ▒▒███ ▒▒███ 
+ ███     ▒▒███ ▒███    ▒███  ▒███            ▒   ▒███  ▒  ▒███   ▒███  ▒███ 
+▒███      ▒███ ▒██████████   ▒███  ██████████    ▒███     ▒███   ▒███  ▒███ 
+▒███      ▒███ ▒███▒▒▒▒▒███  ▒███ ▒▒▒▒▒▒▒▒▒▒     ▒███     ▒███   ▒███  ▒███ 
+▒▒███     ███  ▒███    ▒███  ▒███                ▒███     ▒███   ▒███  ▒███ 
+ ▒▒▒███████▒   █████   █████ █████               █████    ▒▒████████   █████
+   ▒▒▒▒▒▒▒    ▒▒▒▒▒   ▒▒▒▒▒ ▒▒▒▒▒               ▒▒▒▒▒      ▒▒▒▒▒▒▒▒   ▒▒▒▒▒
+)" << RESET << std::endl;
+        std::cout << BOLD << BLUE << "ORI Terminal Assistant v1.1.1" << RESET << "\n";
+        // Single newline after instructions to avoid empty-space gap
+        std::cout << "Type '/help' for available commands or '/quit' to exit.\n";
+    }
+}
+
+void OriAssistant::displayCommandLog() {
+    std::cout << BOLD << "--- Command Execution Log ---" << RESET << std::endl;
+    if (command_log.empty()) {
+        std::cout << "No commands executed yet." << std::endl;
+    } else {
+        for (const auto& entry : command_log) {
+            std::cout << "> " << BOLD << CYAN << entry.command << RESET << std::endl;
+            std::cout << entry.output << std::endl;
+        }
+    }
+    std::cout << BOLD << "---------------------------" << RESET << std::endl;
 }
 
 void OriAssistant::handleResponse(const std::string& response, bool auto_confirm) {
@@ -860,11 +920,46 @@ void OriAssistant::processSingleRequest(const std::string& prompt, bool auto_con
         return;
     }
     
+    std::string full_prompt = prompt;
+    if (!pre_prompt_context.empty()) {
+        full_prompt = pre_prompt_context + "\n" + prompt;
+        pre_prompt_context.clear();
+    }
+    
     // Get response and handle it
-    handleResponse(api->sendQuery(prompt), auto_confirm);
+    handleResponse(api->sendQuery(full_prompt), auto_confirm);
 }
 
-void OriAssistant::handleCommandExecution(const std::string& command, bool auto_confirm) {
+pid_t popen2(const char *command, int *read_fd) {
+    int pipe_fd[2];
+    if (pipe(pipe_fd) == -1) {
+        return -1;
+    }
+
+    pid_t pid = fork();
+    if (pid == -1) {
+        close(pipe_fd[0]);
+        close(pipe_fd[1]);
+        return -1;
+    }
+
+    if (pid == 0) { // child
+        close(pipe_fd[0]); // close read end
+        dup2(pipe_fd[1], STDOUT_FILENO);
+        dup2(pipe_fd[1], STDERR_FILENO); // also redirect stderr
+        close(pipe_fd[1]);
+        setpgid(0, 0); // create new process group
+        execl("/bin/sh", "sh", "-c", command, NULL);
+        _exit(127); // if execl fails
+    }
+
+    // parent
+    close(pipe_fd[1]); // close write end
+    *read_fd = pipe_fd[0];
+    return pid;
+}
+
+void OriAssistant::handleCommandExecution(const std::string& command, bool auto_confirm, bool send_to_ai) {
     bool confirmed = false;
     if (auto_confirm) {
         confirmed = true;
@@ -876,35 +971,95 @@ void OriAssistant::handleCommandExecution(const std::string& command, bool auto_
 
         std::cout << YELLOW << "Execute the following command? (y/n): " << RESET << BOLD << CYAN << "<< " << command << " >> " << RESET;
         std::string confirmation;
+        interrupted_flag = false;
         std::getline(std::cin, confirmation);
+        if (std::cin.fail() || interrupted_flag) {
+            std::cin.clear();
+            interrupted_flag = false;
+            confirmation = "n";
+            std::cout << std::endl;
+        }
+
         if (confirmation == "y" || confirmation == "Y") {
             confirmed = true;
         }
     }
 
     if (confirmed) {
-        std::cout << MAGENTA << "Executing command: " << command << RESET << std::endl;
-        // Execute the command and capture output
-        std::string result = "";
-        FILE* pipe = popen(command.c_str(), "r");
-        if (!pipe) {
-            result = RED + "Error: could not execute command." + RESET;
-        } else {
-            char buffer[128];
-            while (fgets(buffer, sizeof(buffer), pipe) != NULL) {
-                result += buffer;
-            }
-            pclose(pipe);
+        int read_fd;
+        pid_t pid = popen2(command.c_str(), &read_fd);
+        if (pid == -1) {
+            command_log.push_back({command, "Failed to execute command."});
+            return;
         }
 
-        // Formulate a new prompt and send it back to the AI
-        std::string feedback_prompt = "The command \"" + command + "\" produced the following output:\n---\n" + result + "\n---\nPlease summarize this output or answer the original question based on it.";
-        processSingleRequest(feedback_prompt, auto_confirm);
+        std::string result;
+        char buffer[256];
+        ssize_t bytes_read;
+
+        fcntl(read_fd, F_SETFL, O_NONBLOCK);
+
+        if (!show_command_log) {
+            keep_running = true;
+            interrupted_flag = false;
+            std::thread spinner_thread(run_spinner, "executing command...");
+
+            while (true) {
+                if (interrupted_flag) {
+                    kill(-pid, SIGKILL);
+                    waitpid(pid, NULL, 0);
+                    result += "\n[Command cancelled by user]";
+                    api->sendQuery("User cancelled the command execution.");
+                    break;
+                }
+
+                bytes_read = read(read_fd, buffer, sizeof(buffer) - 1);
+                if (bytes_read > 0) {
+                    buffer[bytes_read] = '\0';
+                    result += buffer;
+                }
+
+                int status;
+                pid_t wait_result = waitpid(pid, &status, WNOHANG);
+                if (wait_result == pid) {
+                    // Drain remaining output
+                    while ((bytes_read = read(read_fd, buffer, sizeof(buffer) - 1)) > 0) {
+                        buffer[bytes_read] = '\0';
+                        result += buffer;
+                    }
+                    break;
+                }
+                if (wait_result == -1) {
+                    break;
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+            keep_running = false;
+            spinner_thread.join();
+        } else {
+            // blocking read when log is shown
+            while ((bytes_read = read(read_fd, buffer, sizeof(buffer) - 1)) > 0) {
+                buffer[bytes_read] = '\0';
+                result += buffer;
+            }
+            waitpid(pid, NULL, 0);
+        }
+        
+        interrupted_flag = false;
+        close(read_fd);
+
+        command_log.push_back({command, result});
+
+        if (send_to_ai) {
+            std::string feedback_prompt = "The command \"" + command + "\" produced the following output:\n---\n" + result + "\n---\nPlease summarize this output or answer the original question based on it.";
+            processSingleRequest(feedback_prompt, auto_confirm);
+        } else {
+            std::cout << result << std::endl;
+            pre_prompt_context += "The user executed the command `" + command + "` with the following output:\n---\n" + result + "\n---";
+        }
     } else {
         std::cout << YELLOW << "Command execution cancelled." << RESET << "\n\n";
-        // Inform the AI that the command was cancelled.
-        std::string cancel_prompt = "The user cancelled the command execution. Please inform the user that you cannot answer the question without running the command.";
-        api->sendQuery(cancel_prompt);
+        api->sendQuery("The user cancelled the command execution. Please inform the user that you cannot answer the question without running the command.");
     }
 }
 
@@ -926,7 +1081,7 @@ void OriAssistant::checkForUpdates(bool silent) {
 
         if (res == CURLE_OK) {
             std::ifstream version_file(".version");
-            std::string current_version = "1.1.0";
+            std::string current_version = "1.1.1";
             if (version_file.is_open()) {
                 std::getline(version_file, current_version);
                 version_file.close();
@@ -978,9 +1133,14 @@ void OriAssistant::checkForUpdates(bool silent) {
 
 void OriAssistant::showHelp() {
     std::cout << "Available commands:\n";
-    std::cout << "  /help     - Show this help message\n";
-    std::cout << "  /quit     - Exit the assistant\n";
-    std::cout << "  /exit     - Exit the assistant\n";
-    std::cout << "  /clear    - Clear the screen\n";
+    std::cout << "  /help          - Show this help message\n";
+    std::cout << "  /quit          - Exit the assistant\n";
+    std::cout << "  /exit          - Exit the assistant\n";
+    std::cout << "  /clear         - Clear the screen\n";
+    std::cout << "  /cat [file]    - Print file content and add it to the chat context\n";
+    std::cout << "  /exec [cmd]    - Execute a shell command and add the output to the chat context\n";
     std::cout << "  Or type any query to send to the AI assistant\n\n";
+    std::cout << "KEYBINDINGS:\n";
+    std::cout << "  Ctrl+F         - Toggle command execution log\n";
+    std::cout << "  Ctrl+C / ESC   - Cancel running command or clear prompt\n";
 }

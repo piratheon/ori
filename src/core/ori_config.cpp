@@ -27,10 +27,10 @@ void ConfigManager::loadConfig(Config& config) {
     Json::Value root;
     file >> root;
 
-    config.port = root.get("port", 8080).asInt();
+    config.port = root.get("port", 8448).asInt();
     config.no_banner = root.get("no_banner", false).asBool();
-    config.no_clear = root.get("no_clear", false).asBool();
-    config.model = root.get("model", "google/gemini-2.0-flash-exp:free").asString();
+    config.no_clear = root.get("no_clear", true).asBool();
+    config.model = root.get("model", "qwen/qwen3-coder:free").asString();
 }
 
 void ConfigManager::saveConfig(const Config& config) {

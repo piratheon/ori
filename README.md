@@ -8,11 +8,11 @@
  ▒▒▒███████▒   █████   █████ █████               █████    ▒▒████████   █████
    ▒▒▒▒▒▒▒    ▒▒▒▒▒   ▒▒▒▒▒ ▒▒▒▒▒               ▒▒▒▒▒      ▒▒▒▒▒▒▒▒   ▒▒▒▒▒
 ```
-## Ori Assistant v1.1.0
+## Ori Assistant v1.1.1
 
 A terminal‑first AI assistant for Linux with both a Text User Interface (TUI) and a web-based Graphical User Interface (GUI). Integrates with OpenRouter to access multiple LLMs. Built for developers, power users, and sysadmins who want to run AI workflows from the terminal or the browser.
 
-Version: 1.1.0 — Release highlights: loading spinner, persistent config, new CLI flags.
+Version: 1.1.1 — Release highlights: new slash commands, command log, keybindings, and auto-retry.
 
 ## Quick links
 - Repository: https://github.com/piratheon/ori (this one)
@@ -22,6 +22,7 @@ Version: 1.1.0 — Release highlights: loading spinner, persistent config, new C
 
 ### Core
 - **OpenRouter integration:** Connect to multiple AI models.
+- **Auto-retry:** Automatically retries on transient network errors and rate limiting.
 - **Plugin system & Orpm:** Extendable architecture with package management.
 - **Secure API key handling:** API key stored at `~/.config/ori/key`.
 - **Automatic update checks** on startup.
@@ -29,26 +30,30 @@ Version: 1.1.0 — Release highlights: loading spinner, persistent config, new C
 
 ### TUI (Terminal)
 - Interactive conversation with session context.
-- Slash commands: `/help`, `/clear`, `/quit`.
+- Slash commands: `/help`, `/clear`, `/quit`, `/cat`, `/exec`.
+- Command execution log with `Ctrl+F` toggle.
 - Agentic command execution with confirmation.
 - Multiline input and editor-friendly UX.
+- Keybindings:
+  - `Ctrl+F`: Toggle command execution log.
+  - `Ctrl+C` / `ESC`: Cancel running command or clear prompt.
 
 ### GUI (Browser)
 - Web-based chat UI with chat history and model selector.
 - Code canvas for snippets and inline command execution.
 - Runs a local web server (default port 8080).
 
-## New in 1.1.0
-- Loading spinner while waiting for responses.
-- Config file support (`~/.config/ori/config.json`).
-- CLI flags:
-  - `--no-banner` — hide ASCII banner.
-  - `--no-clear` — don’t clear terminal on start.
-  - `--model` / `-m` — override default model.
-  - `--port` / `-p` — override GUI port.
-  - `--config` / `-c`:
-    - `load <path>` — load JSON config.
-    - `set <key> <value>` — set a config value.
+## New in 1.1.1
+- **Auto-retry on network errors**: Added auto-retry with a spinner for transient network errors and rate limiting.
+- **Command Execution Log**:
+    - Added a log to view executed commands and their outputs.
+    - Added `Ctrl+F` shortcut to toggle the log.
+- **Improved Interruption Handling**:
+    - `Ctrl+C` and `ESC` can now cancel running commands and dialogs.
+    - `Ctrl+C` no longer kills the process.
+- **New Slash Commands**:
+    - Added `/cat [file]` to display file content.
+    - Added `/exec [command]` to execute shell commands.
 
 ## Prerequisites
 - C++14-compatible compiler (GCC 5.0+ or Clang 3.4+)
@@ -107,7 +112,7 @@ Start the interactive assistant:
 Useful flags:
 - `--help` — show CLI help
 - `--version` — print version
-- `/help`, `/clear`, `/quit` — available inside TUI
+- `/help`, `/clear`, `/quit`, `/cat`, `/exec` — available inside TUI
 
 ### Non-interactive
 Run a one-off prompt:
@@ -142,6 +147,11 @@ Build & iterate locally
 
 ## Contributing
 Contributions, issues, and PRs welcome. Open an issue to discuss larger changes before submitting PRs. Follow standard fork → branch → PR workflow.
+
+## Changelog (selected)
+- 1.1.1 — New slash commands, command log, keybindings, auto-retry, and code cleanup.
+- 1.1.0 — Loading spinner, persistent config, new CLI flags.
+- 1.0.0 — Add GUI mode.
 
 ## License
 GNU GPL-3.0 — see [LICENSE](LICENSE)  file.

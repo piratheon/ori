@@ -12,6 +12,11 @@
 #include <signal.h>
 #include <sys/wait.h>
 #include <filesystem>
+#include <cerrno>
+#include <cstring>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 #define CPPHTTPLIB_OPENSSL_SUPPORT
 #define SERVER_CERT_FILE "cert.pem"
@@ -226,48 +231,6 @@ void ori::start_gui(int port)
         }
     });
 
-    svr.Get("/api/exec_log", [](const httplib::Request &req, httplib::Response &res) {
-        std::string command_id = req.get_param_value("command_id");
-        if (running_commands.count(command_id)) {
-            std::ifstream log_file(running_commands[command_id].log_path);
-            std::string log_content((std::istreambuf_iterator<char>(log_file)), std::istreambuf_iterator<char>());
-            int status;
-            pid_t result = waitpid(running_commands[command_id].pid, &status, WNOHANG);
-            Json::Value root;
-            root["log"] = log_content;
-            if (result == running_commands[command_id].pid) {
-                root["status"] = "finished";
-                running_commands.erase(command_id);
-            } else {
-                root["status"] = "running";
-            }
-            res.set_content(root.toStyledString(), "application/json");
-        } else {
-            Json::Value err;
-            err["error"] = "Invalid command ID";
-            res.set_content(err.toStyledString(), "application/json");
-        }
-    });
-
-    svr.Post("/api/exec_kill", [](const httplib::Request &req, httplib::Response &res) {
-        Json::Value root;
-        Json::Reader reader;
-        reader.parse(req.body, root);
-        std::string command_id = root["command_id"].asString();
-
-        if (running_commands.count(command_id)) {
-            kill(running_commands[command_id].pid, SIGKILL);
-            running_commands.erase(command_id);
-            Json::Value result;
-            result["status"] = "killed";
-            res.set_content(result.toStyledString(), "application/json");
-        } else {
-            Json::Value err;
-            err["error"] = "Invalid command ID";
-            res.set_content(err.toStyledString(), "application/json");
-        }
-    });
-
     auto serve_local = [](const std::string &req_path, httplib::Response &res) -> bool {
         std::string path = req_path;
         if (path == "/") path = "/index.html";
@@ -345,6 +308,61 @@ void ori::start_gui(int port)
         res.set_content("Not Found", "text/plain");
     });
 
+    // Helper: test whether we can bind to a port (without leaving it bound)
+    auto can_bind = [&](int test_port, int &out_errno) -> bool {
+        int s = socket(AF_INET, SOCK_STREAM, 0);
+        if (s == -1) { out_errno = errno; return false; }
+        int opt = 1;
+        setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+        struct sockaddr_in addr{};
+        addr.sin_family = AF_INET;
+        addr.sin_addr.s_addr = INADDR_ANY;
+        addr.sin_port = htons(static_cast<uint16_t>(test_port));
+        if (bind(s, (struct sockaddr*)&addr, sizeof(addr)) == 0) {
+            close(s);
+            out_errno = 0;
+            return true;
+        } else {
+            out_errno = errno;
+            close(s);
+            return false;
+        }
+    };
+
     std::cout << "Starting server on port " << port << "..." << std::endl;
-    svr.listen("0.0.0.0", port);
+    int test_errno = 0;
+    if (!can_bind(port, test_errno)) {
+        std::cerr << "Error: cannot bind to port " << port << ". errno " << test_errno << " (" << std::strerror(test_errno) << ")" << std::endl;
+
+        // Best-effort: try to discover a process listening on that port using `ss`.
+        auto find_listener = [&](int p) -> std::string {
+            std::string cmd = "ss -ltnp 2>/dev/null | grep -E 'LISTEN' | grep -w ':" + std::to_string(p) + "' || true";
+            FILE *fp = popen(cmd.c_str(), "r");
+            if (!fp) return std::string();
+            char buf[1024];
+            std::string out;
+            while (fgets(buf, sizeof(buf), fp)) out += buf;
+            pclose(fp);
+            return out;
+        };
+
+        std::string listener_info = find_listener(port);
+        if (!listener_info.empty()) {
+            std::cerr << "Process listening on port " << port << ":\n" << listener_info << std::endl;
+            std::cerr << "Options: stop that process (e.g. `sudo kill <PID>`), or change Ori's port in ~/.config/ori/config.json or with `--port`." << std::endl;
+        } else {
+            std::cerr << "No listening process discovered for port " << port << "." << std::endl;
+            std::cerr << "Possible causes: another process is bound, or permission denied for privileged ports (<1024)." << std::endl;
+            std::cerr << "Please free the port, run with appropriate privileges, or start Ori on a different port using `--port`." << std::endl;
+        }
+
+        return;
+    }
+
+    // Port appears free — start server on the requested port
+    if (!svr.listen("0.0.0.0", port)) {
+        std::cerr << "Error: svr.listen failed for port " << port << ", errno " << errno << " (" << std::strerror(errno) << ")" << std::endl;
+        std::cerr << "If this is a privileged port (<1024) try running as root or choose a different port with --port." << std::endl;
+        return;
+    }
 }

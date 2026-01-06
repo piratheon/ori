@@ -115,7 +115,7 @@ bool OriEdit::restoreBackup(const std::string& filename) {
 
 bool OriEdit::confirmChange(const std::string& description, const std::string& preview) {
     std::cout << YELLOW << description << " (y/n): " << RESET;
-    std::string response;
+    std::string response; 
     std::getline(std::cin, response);
     return (response == "y" || response == "Y");
 }

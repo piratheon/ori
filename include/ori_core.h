@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <atomic>
 
 #ifdef CURL_FOUND
 #include <curl/curl.h>
@@ -54,14 +55,13 @@ public:
     void setModel(const std::string& model_name);
     void setIsGui(bool isGui);
     void setSystemPrompt(const std::string& prompt);
-    // No-op encryption functions (kept for API compatibility)
-    std::string encrypt(const std::string& data, const std::string& key);
-    std::string decrypt(const std::string& data, const std::string& key);
-    // Build an encryption key from multiple non-privileged machine/user factors
-    std::string buildEncryptionKey();
     
     std::string sendQuery(const std::string& prompt);
-    std::string sendComplexQuery(const std::string& prompt);
+};
+
+struct CommandLogEntry {
+    std::string command;
+    std::string output;
 };
 
 class OriAssistant {
@@ -69,12 +69,19 @@ private:
     std::string executable_path;
     const size_t BANNER_HEIGHT = 12;  // Height of the banner in lines
     size_t current_output_lines = 0;  // Track number of lines output
+    std::vector<CommandLogEntry> command_log;
+    bool show_command_log = false;
+    void displayCommandLog();
+    void showBanner();
+    std::string pre_prompt_context;
+
 public:
     std::unique_ptr<OpenRouterAPI> api;
     Config config;
     ConfigManager configManager;
     
 public:
+    static std::atomic<bool> interrupted_flag;
     OriAssistant();
     ~OriAssistant();
     
@@ -86,7 +93,7 @@ public:
     // Supports Alt+Enter to insert a newline without submitting.
     std::string readInput();
     void processSingleRequest(const std::string& prompt, bool auto_confirm);
-    void handleCommandExecution(const std::string& command, bool auto_confirm);
+    void handleCommandExecution(const std::string& command, bool auto_confirm, bool send_to_ai = true);
     void handleResponse(const std::string& response, bool auto_confirm);
     void checkForUpdates(bool silent);
 };

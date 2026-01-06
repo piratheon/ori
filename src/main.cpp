@@ -73,14 +73,6 @@ Options that can be used with edits: preview, diff, backup, interactive, safe.
 Examples of edit operations (JSON in plain text):
 [edit]
 {
-    "operation": "search",
-    "file": "src/main.cpp",
-    "content": { "pattern": "TODO" }
-}
-[/edit]
-
-[edit]
-{
     "operation": "replace",
     "file": "config.json",
     "content": { "old": "development", "new": "production" }
@@ -120,7 +112,7 @@ I am here to be your reliable partner in the terminal. Let me know what you need
 )ORI_PROMPT";
 
 void showUsage() {
-    std::cout << "ORI Terminal Assistant v1.1.0 - Linux TUI AI Assistant\n";
+    std::cout << "ORI Terminal Assistant v1.1.1 - Linux TUI AI Assistant\n";
     std::cout << "Usage: ori [options] [prompt]\n\n";
     std::cout << "Options:\n";
     std::cout << "  -h, --help              Show this help message\n";
@@ -142,7 +134,7 @@ void showUsage() {
 }
 
 void showVersion() {
-    std::cout << "ORI Terminal Assistant v1.1.0\n";
+    std::cout << "ORI Terminal Assistant v1.1.1\n";
 }
 
 void processDirectPrompt(OriAssistant& assistant, const std::string& prompt, bool auto_confirm) {
