@@ -149,7 +149,7 @@ Build & iterate locally
 Contributions, issues, and PRs welcome. Open an issue to discuss larger changes before submitting PRs. Follow standard fork → branch → PR workflow.
 
 ## Changelog (1.x.x)
-- 1.1.3 — Fix Ctrl+C doesn't work on WebUI mode, and add a new debug option.
+- 1.1.3 — Fix Ctrl+C doesn't work on WebUI mode, and add a new debug option, also improve scripts to detect current distro and install deps for it.
 - 1.1.2 — New cat command to print current configurations values.
 - 1.1.1 — New slash commands, command log, keybindings, auto-retry, and code cleanup.
 - 1.1.0 — Loading spinner, persistent config, new CLI flags.
