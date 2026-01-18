@@ -8,7 +8,7 @@
  ▒▒▒███████▒   █████   █████ █████               █████    ▒▒████████   █████
    ▒▒▒▒▒▒▒    ▒▒▒▒▒   ▒▒▒▒▒ ▒▒▒▒▒               ▒▒▒▒▒      ▒▒▒▒▒▒▒▒   ▒▒▒▒▒
 ```
-## Ori Assistant v1.1.2
+## Ori Assistant v1.1.3
 
 A terminal‑first AI assistant for Linux with both a Text User Interface (TUI) and a web-based Graphical User Interface (GUI). Integrates with OpenRouter to access multiple LLMs. Built for developers, power users, and sysadmins who want to run AI workflows from the terminal or the browser.
 
