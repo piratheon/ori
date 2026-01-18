@@ -1,6 +1,6 @@
 # Maintainer: Piratheon <chafiq.dev@gmail.com>
 pkgname=ori
-pkgver=1.1.1
+pkgver=1.1.2
 pkgrel=1
 pkgdesc="OpenRouter Interactive Terminal AI Assistant"
 arch=(x86_64)

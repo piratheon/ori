@@ -112,7 +112,7 @@ I am here to be your reliable partner in the terminal. Let me know what you need
 )ORI_PROMPT";
 
 void showUsage() {
-    std::cout << "ORI Terminal Assistant v1.1.1 - Linux TUI AI Assistant\n";
+    std::cout << "ORI Terminal Assistant v1.1.2 - Linux TUI AI Assistant\n";
     std::cout << "Usage: ori [options] [prompt]\n\n";
     std::cout << "Options:\n";
     std::cout << "  -h, --help              Show this help message\n";
@@ -122,6 +122,7 @@ void showUsage() {
     std::cout << "  -c, --config <command>  Manage configuration\n";
     std::cout << "                            load <path>  Load a configuration from a file\n";
     std::cout << "                            set <key> <value>  Set a configuration value\n";
+    std::cout << "                            cat <key|all>  Print a configuration value or all values\n";
     std::cout << "  --check-for-updates     Check for updates\n";
     std::cout << "  --no-banner             Load Ori without the ASCII banner\n";
     std::cout << "  --no-clear              Load Ori without clearing the terminal\n";
@@ -134,7 +135,7 @@ void showUsage() {
 }
 
 void showVersion() {
-    std::cout << "ORI Terminal Assistant v1.1.1\n";
+    std::cout << "ORI Terminal Assistant v1.1.2\n";
 }
 
 void processDirectPrompt(OriAssistant& assistant, const std::string& prompt, bool auto_confirm) {
@@ -221,6 +222,28 @@ int main(int argc, char* argv[]) {
                 } else if (config_cmd == "set" && i + 3 < args.size()) {
                     assistant.configManager.updateConfig(args[i + 2], args[i + 3]);
                     return 0;
+                } else if (config_cmd == "cat") {
+                    // If a key was provided, print it; otherwise show available config keys
+                    if (i + 2 < args.size()) {
+                        std::string key = args[i + 2];
+                        if (key == "all") {
+                            std::string all = assistant.configManager.getAllConfig();
+                            std::cout << all << std::endl;
+                            return 0;
+                        } else {
+                            std::string val = assistant.configManager.getConfigValue(key);
+                            if (val.empty()) {
+                                std::cerr << "Unknown config key: " << key << std::endl;
+                                return 1;
+                            }
+                            std::cout << val << std::endl;
+                            return 0;
+                        }
+                    } else {
+                        std::cout << "Available config keys: port, model, no_banner, no_clear, all" << std::endl;
+                        std::cout << "Usage: --config cat <key|all>  (e.g. --config cat model)" << std::endl;
+                        return 0;
+                    }
                 }
             }
         } else if (arg == "--check-for-updates") {

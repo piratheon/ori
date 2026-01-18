@@ -8,11 +8,11 @@
  ▒▒▒███████▒   █████   █████ █████               █████    ▒▒████████   █████
    ▒▒▒▒▒▒▒    ▒▒▒▒▒   ▒▒▒▒▒ ▒▒▒▒▒               ▒▒▒▒▒      ▒▒▒▒▒▒▒▒   ▒▒▒▒▒
 ```
-## Ori Assistant v1.1.1
+## Ori Assistant v1.1.2
 
 A terminal‑first AI assistant for Linux with both a Text User Interface (TUI) and a web-based Graphical User Interface (GUI). Integrates with OpenRouter to access multiple LLMs. Built for developers, power users, and sysadmins who want to run AI workflows from the terminal or the browser.
 
-Version: 1.1.1 — Release highlights: new slash commands, command log, keybindings, and auto-retry.
+Version: 1.1.2 — Release highlights: new slash commands, command log, keybindings, and auto-retry.
 
 ## Quick links
 - Repository: https://github.com/piratheon/ori (this one)
@@ -43,7 +43,7 @@ Version: 1.1.1 — Release highlights: new slash commands, command log, keybindi
 - Code canvas for snippets and inline command execution.
 - Runs a local web server (default port 8080).
 
-## New in 1.1.1
+## New in 1.1.2
 - **Auto-retry on network errors**: Added auto-retry with a spinner for transient network errors and rate limiting.
 - **Command Execution Log**:
     - Added a log to view executed commands and their outputs.
@@ -101,6 +101,11 @@ Examples:
   ```
   ./build/ori --config load /path/to/settings.json
   ```
+ - Print a config value or all values:
+   ```
+   ./build/ori --config cat model
+   ./build/ori --config cat all
+   ```
 
 ## Usage
 
@@ -149,7 +154,7 @@ Build & iterate locally
 Contributions, issues, and PRs welcome. Open an issue to discuss larger changes before submitting PRs. Follow standard fork → branch → PR workflow.
 
 ## Changelog (selected)
-- 1.1.1 — New slash commands, command log, keybindings, auto-retry, and code cleanup.
+- 1.1.2 — New slash commands, command log, keybindings, auto-retry, and code cleanup.
 - 1.1.0 — Loading spinner, persistent config, new CLI flags.
 - 1.0.0 — Add GUI mode.
 

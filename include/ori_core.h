@@ -34,6 +34,10 @@ public:
     void saveConfig(const Config& config);
     void loadExternalConfig(Config& config, const std::string& path);
     void updateConfig(const std::string& key, const std::string& value);
+    // Return a single config value as string (empty if not found)
+    std::string getConfigValue(const std::string& key);
+    // Return a JSON string containing all config values
+    std::string getAllConfig();
 };
 
 class OpenRouterAPI {

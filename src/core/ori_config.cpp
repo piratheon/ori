@@ -84,3 +84,34 @@ void ConfigManager::updateConfig(const std::string& key, const std::string& valu
 
     saveConfig(config);
 }
+
+std::string ConfigManager::getConfigValue(const std::string& key) {
+    Config config;
+    loadConfig(config);
+
+    if (key == "port") {
+        return std::to_string(config.port);
+    } else if (key == "no_banner") {
+        return config.no_banner ? "true" : "false";
+    } else if (key == "no_clear") {
+        return config.no_clear ? "true" : "false";
+    } else if (key == "model") {
+        return config.model;
+    }
+
+    return std::string();
+}
+
+std::string ConfigManager::getAllConfig() {
+    Config config;
+    loadConfig(config);
+
+    Json::Value root;
+    root["port"] = config.port;
+    root["no_banner"] = config.no_banner;
+    root["no_clear"] = config.no_clear;
+    root["model"] = config.model;
+
+    Json::StreamWriterBuilder writer;
+    return Json::writeString(writer, root);
+}
