@@ -12,8 +12,6 @@
 
 A terminal‑first AI assistant for Linux with both a Text User Interface (TUI) and a web-based Graphical User Interface (GUI). Integrates with OpenRouter to access multiple LLMs. Built for developers, power users, and sysadmins who want to run AI workflows from the terminal or the browser.
 
-Version: 1.1.2 — Release highlights: new slash commands, command log, keybindings, and auto-retry.
-
 ## Quick links
 - Repository: https://github.com/piratheon/ori (this one)
 - OpenRouter keys: https://openrouter.ai/settings/keys
@@ -153,8 +151,9 @@ Build & iterate locally
 ## Contributing
 Contributions, issues, and PRs welcome. Open an issue to discuss larger changes before submitting PRs. Follow standard fork → branch → PR workflow.
 
-## Changelog (selected)
-- 1.1.2 — New slash commands, command log, keybindings, auto-retry, and code cleanup.
+## Changelog (1.x.x)
+- 1.1.2 - New cat command to print current configurations values
+- 1.1.1 — New slash commands, command log, keybindings, auto-retry, and code cleanup.
 - 1.1.0 — Loading spinner, persistent config, new CLI flags.
 - 1.0.0 — Add GUI mode.
 
