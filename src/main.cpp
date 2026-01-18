@@ -128,6 +128,7 @@ void showUsage() {
     std::cout << "  --no-clear              Load Ori without clearing the terminal\n";
     std::cout << "  -m, --model <model_name>      Specify the AI model to use (overrides config)\n";
     std::cout << "  -p, --port <port_number>      Specify the port for the GUI (overrides config)\n";
+    std::cout << "  -d, --debug             Enable debug logging\n"; // Added debug flag
     std::cout << "\nShell Integration Examples:\n";
     std::cout << "  ori -y 'install nmap for me'\n";
     std::cout << "  ori print current active username\n";
@@ -266,11 +267,26 @@ int main(int argc, char* argv[]) {
                 assistant.config.port = std::stoi(args[i + 1]);
                 i++;
             }
+        } else if (arg == "-d" || arg == "--debug") {
+            assistant.config.debug = true;
         } else {
             prompt_start_index = i;
             break;
         }
     }
+
+    // Check for --port without --gui and issue a warning
+    if (assistant.config.port != 8080 && !gui_mode) {
+        std::cerr << YELLOW << "Warning: --port specified but --gui not enabled. Port setting will be ignored." << RESET << std::endl;
+        std::cerr << YELLOW << "Please use -g or --gui to start the web UI." << RESET << std::endl;
+        return 1; // Exit after warning
+    }
+
+    // Set global g_is_gui_mode *before* initialize() is called
+    g_is_gui_mode = gui_mode;
+
+    // Set global debug flag for GUI mode
+    g_debug_enabled_in_gui_mode = assistant.config.debug && g_is_gui_mode;
 
     if (gui_mode) {
         ori::start_gui(assistant.config.port);

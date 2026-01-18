@@ -20,9 +20,17 @@ struct Config {
     bool no_banner;
     bool no_clear;
     std::string model;
+    bool debug; // Added debug flag
 
     Config();
 };
+
+extern bool g_debug_enabled_in_gui_mode; // Global flag for GUI debug logging
+extern bool g_is_gui_mode; // Global flag for GUI mode
+
+// ANSI Color Codes (declared extern for main.cpp usage)
+extern const std::string RESET;
+extern const std::string YELLOW;
 
 class ConfigManager {
 private:
@@ -85,7 +93,8 @@ public:
     ConfigManager configManager;
     
 public:
-    static std::atomic<bool> interrupted_flag;
+        
+        static std::atomic<bool> interrupted_flag;
     OriAssistant();
     ~OriAssistant();
     

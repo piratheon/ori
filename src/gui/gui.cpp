@@ -165,6 +165,10 @@ void ori::start_gui(int port)
         std::string session_id = root["session_id"].asString();
         std::string model = root["model"].asString();
 
+        if (g_debug_enabled_in_gui_mode) {
+            std::cout << "Debug: Received /api/prompt request. Prompt: '" << prompt << "', Session ID: '" << session_id << "', Model: '" << model << "'" << std::endl;
+        }
+
         if (session_id.empty()) {
             session_id = std::to_string(next_session_id++);
         }
@@ -176,15 +180,25 @@ void ori::start_gui(int port)
             Json::Value err;
             err["error"] = "Failed to initialize assistant";
             res.set_content(err.toStyledString(), "application/json");
+            if (g_debug_enabled_in_gui_mode) {
+                std::cerr << "Debug: Assistant initialization failed for /api/prompt." << std::endl;
+            }
             return;
         }
 
         // Apply model selection after initialization so config does not override it
         if (!model.empty()) {
             assistant.api->setModel(model);
+            if (g_debug_enabled_in_gui_mode) {
+                std::cout << "Debug: Model set to " << model << std::endl;
+            }
         }
 
         std::string response = assistant.api->sendQuery(prompt);
+        
+        if (g_debug_enabled_in_gui_mode) {
+            std::cout << "Debug: API response for prompt '" << prompt << "': " << response.substr(0, std::min((int)response.length(), 100)) << "..." << std::endl; // Log first 100 chars
+        }
         
         chat_sessions[session_id].push_back({prompt, response});
 
@@ -359,10 +373,17 @@ void ori::start_gui(int port)
         return;
     }
 
+    if (g_debug_enabled_in_gui_mode) {
+        std::cout << "Debug: Initializing HTTP server." << std::endl;
+    }
+
     // Port appears free — start server on the requested port
     if (!svr.listen("0.0.0.0", port)) {
         std::cerr << "Error: svr.listen failed for port " << port << ", errno " << errno << " (" << std::strerror(errno) << ")" << std::endl;
         std::cerr << "If this is a privileged port (<1024) try running as root or choose a different port with --port." << std::endl;
         return;
+    }
+    if (g_debug_enabled_in_gui_mode) {
+        std::cout << "Debug: Server listening on 0.0.0.0:" << port << std::endl;
     }
 }

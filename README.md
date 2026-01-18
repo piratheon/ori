@@ -41,22 +41,19 @@ A terminal‑first AI assistant for Linux with both a Text User Interface (TUI) 
 - Code canvas for snippets and inline command execution.
 - Runs a local web server (default port 8080).
 
-## New in 1.1.2
-- **Auto-retry on network errors**: Added auto-retry with a spinner for transient network errors and rate limiting.
-- **Command Execution Log**:
-    - Added a log to view executed commands and their outputs.
-    - Added `Ctrl+F` shortcut to toggle the log.
-- **Improved Interruption Handling**:
-    - `Ctrl+C` and `ESC` can now cancel running commands and dialogs.
-    - `Ctrl+C` no longer kills the process.
-- **New Slash Commands**:
-    - Added `/cat [file]` to display file content.
-    - Added `/exec [command]` to execute shell commands.
 
 ## Prerequisites
 - C++14-compatible compiler (GCC 5.0+ or Clang 3.4+)
 - CMake 3.10+
 - OpenRouter API key
+
+### External libraries 
+
+| Distribution | Packages | Install command |
+|---|---:|---|
+| Debian / Ubuntu | libjsoncpp-dev, libcurl4-openssl-dev | sudo apt-get update && sudo apt-get install -y libjsoncpp-dev libcurl4-openssl-dev |
+| Fedora | jsoncpp-devel, libcurl-devel | sudo dnf install -y jsoncpp-devel libcurl-devel |
+| Arch Linux | jsoncpp, curl (with libcurl) | sudo pacman -Syu --noconfirm jsoncpp curl 
 
 ## Install
 
@@ -152,7 +149,8 @@ Build & iterate locally
 Contributions, issues, and PRs welcome. Open an issue to discuss larger changes before submitting PRs. Follow standard fork → branch → PR workflow.
 
 ## Changelog (1.x.x)
-- 1.1.2 - New cat command to print current configurations values
+- 1.1.3 — Fix Ctrl+C doesn't work on WebUI mode, and add a new debug option.
+- 1.1.2 — New cat command to print current configurations values.
 - 1.1.1 — New slash commands, command log, keybindings, auto-retry, and code cleanup.
 - 1.1.0 — Loading spinner, persistent config, new CLI flags.
 - 1.0.0 — Add GUI mode.

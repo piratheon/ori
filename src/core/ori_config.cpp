@@ -4,7 +4,7 @@
 #include <sys/stat.h>
 #include <filesystem>
 
-Config::Config() : port(8080), no_banner(false), no_clear(false), model("google/gemini-2.0-flash-exp:free") {}
+Config::Config() : port(8080), no_banner(false), no_clear(false), model("google/gemini-2.0-flash-exp:free"), debug(false) {}
 
 ConfigManager::ConfigManager() {
     const char* home_dir = getenv("HOME");
@@ -31,6 +31,7 @@ void ConfigManager::loadConfig(Config& config) {
     config.no_banner = root.get("no_banner", false).asBool();
     config.no_clear = root.get("no_clear", true).asBool();
     config.model = root.get("model", "qwen/qwen3-coder:free").asString();
+    config.debug = root.get("debug", false).asBool();
 }
 
 void ConfigManager::saveConfig(const Config& config) {
@@ -39,6 +40,7 @@ void ConfigManager::saveConfig(const Config& config) {
     root["no_banner"] = config.no_banner;
     root["no_clear"] = config.no_clear;
     root["model"] = config.model;
+    root["debug"] = config.debug;
 
     std::filesystem::path p(config_path);
     std::filesystem::create_directories(p.parent_path());
@@ -66,6 +68,7 @@ void ConfigManager::loadExternalConfig(Config& config, const std::string& path) 
     config.no_banner = root.get("no_banner", false).asBool();
     config.no_clear = root.get("no_clear", false).asBool();
     config.model = root.get("model", "google/gemini-2.0-flash-exp:free").asString();
+    config.debug = root.get("debug", false).asBool();
 }
 
 void ConfigManager::updateConfig(const std::string& key, const std::string& value) {
@@ -80,6 +83,8 @@ void ConfigManager::updateConfig(const std::string& key, const std::string& valu
         config.no_clear = (value == "true");
     } else if (key == "model") {
         config.model = value;
+    } else if (key == "debug") {
+        config.debug = (value == "true");
     }
 
     saveConfig(config);
@@ -97,6 +102,8 @@ std::string ConfigManager::getConfigValue(const std::string& key) {
         return config.no_clear ? "true" : "false";
     } else if (key == "model") {
         return config.model;
+    } else if (key == "debug") {
+        return config.debug ? "true" : "false";
     }
 
     return std::string();
@@ -111,6 +118,7 @@ std::string ConfigManager::getAllConfig() {
     root["no_banner"] = config.no_banner;
     root["no_clear"] = config.no_clear;
     root["model"] = config.model;
+    root["debug"] = config.debug;
 
     Json::StreamWriterBuilder writer;
     return Json::writeString(writer, root);

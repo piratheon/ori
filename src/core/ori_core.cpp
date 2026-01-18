@@ -19,9 +19,14 @@
 #include <sys/wait.h>
 
 static std::atomic<bool> keep_running{true};
+bool g_is_gui_mode = false;
+bool g_debug_enabled_in_gui_mode = false; // New global flag for GUI debug logging
 std::atomic<bool> OriAssistant::interrupted_flag{false};
 
 void sigint_handler(int signum) {
+    if (g_is_gui_mode) {
+        exit(0); // Terminate the process if in GUI mode
+    }
     OriAssistant::interrupted_flag = true;
 }
 
@@ -423,6 +428,7 @@ std::string OpenRouterAPI::getApiKey() const {
 
 void OpenRouterAPI::setIsGui(bool isGui) {
     m_isGui = isGui;
+    g_is_gui_mode = isGui;
 }
 
 std::string OpenRouterAPI::colorize(const std::string& color, const std::string& text) {
