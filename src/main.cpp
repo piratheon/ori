@@ -112,7 +112,7 @@ I am here to be your reliable partner in the terminal. Let me know what you need
 )ORI_PROMPT";
 
 void showUsage() {
-    std::cout << "ORI Terminal Assistant v1.1.2 - Linux TUI AI Assistant\n";
+    std::cout << "ORI Terminal Assistant v1.1.3 - Linux TUI AI Assistant\n";
     std::cout << "Usage: ori [options] [prompt]\n\n";
     std::cout << "Options:\n";
     std::cout << "  -h, --help              Show this help message\n";
@@ -136,7 +136,7 @@ void showUsage() {
 }
 
 void showVersion() {
-    std::cout << "ORI Terminal Assistant v1.1.2\n";
+    std::cout << "ORI Terminal Assistant v1.1.3\n";
 }
 
 void processDirectPrompt(OriAssistant& assistant, const std::string& prompt, bool auto_confirm) {
