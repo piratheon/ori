@@ -32,10 +32,35 @@ jobs:
           chmod 644 ~/.ssh/known_hosts
         shell: bash
 
-      - name: Add AUR SSH key
-        uses: webfactory/ssh-agent@v0.9.1
-        with:
-          ssh-private-key: ${{ secrets.AUR_SSH_KEY }}
+      - name: Start ssh-agent and add key (with passphrase)
+        env:
+          AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
+          AUR_SSH_PSWD: ${{ secrets.AUR_SSH_PSWD }}
+        run: |
+          set -euo pipefail
+
+          # Write private key preserving newlines
+          mkdir -p ~/.ssh
+          printf '%s\n' "$AUR_SSH_KEY" > ~/.ssh/aur_key
+          chmod 600 ~/.ssh/aur_key
+
+          # Askpass helper echoes the passphrase from the environment at runtime
+          cat > ~/.ssh/askpass.sh <<'EOF'
+          #!/bin/sh
+          echo "$AUR_SSH_PSWD"
+          EOF
+          chmod 700 ~/.ssh/askpass.sh
+
+          # Start ssh-agent and add key non-interactively via SSH_ASKPASS + setsid
+          eval "$(ssh-agent -s)"
+          export SSH_ASKPASS="$HOME/.ssh/askpass.sh"
+          export DISPLAY=:0
+          # Use setsid so ssh-add will use SSH_ASKPASS (no TTY)
+          setsid ssh-add ~/.ssh/aur_key < /dev/null
+
+          # Verify key was added
+          ssh-add -l
+        shell: bash
 
       - name: Publish to AUR
         uses: KSXGitHub/github-actions-deploy-aur@v2.7.0
@@ -46,3 +71,15 @@ jobs:
           ssh_keyscan_types: rsa,ecdsa,ed25519
           commit_username: ${{ secrets.AUR_USERNAME }}
           commit_email: ${{ secrets.AUR_EMAIL }}
+
+      - name: Cleanup SSH key and askpass
+        run: |
+          set -euo pipefail
+          # Best-effort secure removal
+          if command -v shred >/dev/null 2>&1; then
+            shred -u ~/.ssh/aur_key 2>/dev/null || true
+            shred -u ~/.ssh/askpass.sh 2>/dev/null || true
+          else
+            rm -f ~/.ssh/aur_key ~/.ssh/askpass.sh || true
+          fi
+        shell: bash
