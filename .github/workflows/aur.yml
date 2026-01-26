@@ -1,0 +1,28 @@
+name: aur-publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  aur:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare PKGBUILD
+        run: |
+          cp aur/PKGBUILD .
+          makepkg --printsrcinfo > .SRCINFO  # Generate .SRCINFO from PKGBUILD
+
+      - name: Publish to AUR
+        uses: KSXGitHub/github-actions-deploy-aur@v2.7.0
+        with:
+          pkgname: ori
+          pkgbuild: ./PKGBUILD
+          ssh_private_key: ${{ secrets.AUR_SSH_KEY }}
+          commit_message: "Release ${{ github.ref_name }}"
+          ssh_keyscan_types: rsa,ecdsa,ed25519
+          commit_username: ${{ secrets.AUR_USERNAME }}
+          commit_email: ${{ secrets.AUR_EMAIL }}   
