@@ -1,12 +1,12 @@
 name: aur-publish
 
 on:
-  push:
-    tags:
-      - 'v*'
+  release:
+    types: [published]
 
 jobs:
   aur:
+    if: "!github.event.release.prerelease"    # skip prereleases
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,6 +22,7 @@ jobs:
         run: |
           cp aur/PKGBUILD .
           makepkg --printsrcinfo > .SRCINFO
+        shell: bash
 
       - name: Set up SSH known_hosts
         run: |
@@ -41,7 +42,7 @@ jobs:
         with:
           pkgname: ori
           pkgbuild: ./PKGBUILD
-          commit_message: "Release ${{ github.ref_name }}"
+          commit_message: "Release ${{ github.event.release.tag_name }}"
           ssh_keyscan_types: rsa,ecdsa,ed25519
           commit_username: ${{ secrets.AUR_USERNAME }}
           commit_email: ${{ secrets.AUR_EMAIL }}
