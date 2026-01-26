@@ -713,7 +713,7 @@ void OriAssistant::showBanner() {
  ▒▒▒███████▒   █████   █████ █████               █████    ▒▒████████   █████
    ▒▒▒▒▒▒▒    ▒▒▒▒▒   ▒▒▒▒▒ ▒▒▒▒▒               ▒▒▒▒▒      ▒▒▒▒▒▒▒▒   ▒▒▒▒▒
 )" << RESET << std::endl;
-        std::cout << BOLD << BLUE << "ORI Terminal Assistant v1.1.3" << RESET << "\n";
+        std::cout << BOLD << BLUE << "ORI Terminal Assistant v1.1.4" << RESET << "\n";
         // Single newline after instructions to avoid empty-space gap
         std::cout << "Type '/help' for available commands or '/quit' to exit.\n";
     }
@@ -850,7 +850,7 @@ void OriAssistant::handleResponse(const std::string& response, bool auto_confirm
                 if (filename.empty()) {
                     std::cout << YELLOW << "[edit] missing 'file' field" << RESET << std::endl;
                 } else {
-                    OriEdit::EditOperation op;
+                    EditOperation op;
                     op.type = operation;
                     op.filename = filename;
                     op.newContent = newcontent;
@@ -1087,7 +1087,7 @@ void OriAssistant::checkForUpdates(bool silent) {
 
         if (res == CURLE_OK) {
             std::ifstream version_file(".version");
-            std::string current_version = "1.1.3";
+            std::string current_version = "1.1.4";
             if (version_file.is_open()) {
                 std::getline(version_file, current_version);
                 version_file.close();

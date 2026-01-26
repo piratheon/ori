@@ -6,6 +6,7 @@
 struct EditOperation {
     std::string type;
     std::string filename;
+    std::string oldContent;
     std::string newContent;
     bool preview;
     bool diff;

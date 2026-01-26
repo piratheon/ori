@@ -3,6 +3,8 @@
 #include <json/json.h>
 #include <sys/stat.h>
 #include <filesystem>
+#include <functional>
+#include <unordered_map>
 
 Config::Config() : port(8080), no_banner(false), no_clear(false), model("google/gemini-2.0-flash-exp:free"), debug(false) {}
 
@@ -75,16 +77,17 @@ void ConfigManager::updateConfig(const std::string& key, const std::string& valu
     Config config;
     loadConfig(config);
 
-    if (key == "port") {
-        config.port = std::stoi(value);
-    } else if (key == "no_banner") {
-        config.no_banner = (value == "true");
-    } else if (key == "no_clear") {
-        config.no_clear = (value == "true");
-    } else if (key == "model") {
-        config.model = value;
-    } else if (key == "debug") {
-        config.debug = (value == "true");
+    static const std::unordered_map<std::string, std::function<void(Config&, const std::string&)>> updaters = {
+        {"port", [](Config& c, const std::string& v){ c.port = std::stoi(v); }},
+        {"no_banner", [](Config& c, const std::string& v){ c.no_banner = (v == "true"); }},
+        {"no_clear", [](Config& c, const std::string& v){ c.no_clear = (v == "true"); }},
+        {"model", [](Config& c, const std::string& v){ c.model = v; }},
+        {"debug", [](Config& c, const std::string& v){ c.debug = (v == "true"); }}
+    };
+
+    auto it = updaters.find(key);
+    if (it != updaters.end()) {
+        it->second(config, value);
     }
 
     saveConfig(config);
@@ -94,16 +97,17 @@ std::string ConfigManager::getConfigValue(const std::string& key) {
     Config config;
     loadConfig(config);
 
-    if (key == "port") {
-        return std::to_string(config.port);
-    } else if (key == "no_banner") {
-        return config.no_banner ? "true" : "false";
-    } else if (key == "no_clear") {
-        return config.no_clear ? "true" : "false";
-    } else if (key == "model") {
-        return config.model;
-    } else if (key == "debug") {
-        return config.debug ? "true" : "false";
+    static const std::unordered_map<std::string, std::function<std::string(const Config&)>> getters = {
+        {"port", [](const Config& c){ return std::to_string(c.port); }},
+        {"no_banner", [](const Config& c){ return c.no_banner ? "true" : "false"; }},
+        {"no_clear", [](const Config& c){ return c.no_clear ? "true" : "false"; }},
+        {"model", [](const Config& c){ return c.model; }},
+        {"debug", [](const Config& c){ return c.debug ? "true" : "false"; }}
+    };
+
+    auto it = getters.find(key);
+    if (it != getters.end()) {
+        return it->second(config);
     }
 
     return std::string();

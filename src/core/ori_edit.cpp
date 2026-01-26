@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <filesystem>
 
 // ANSI Color Codes from ori_core.h
 const std::string RESET = "\033[0m";
@@ -33,14 +34,18 @@ bool OriEdit::showPreview(const EditOperation& op) {
 
 bool OriEdit::createBackup(const std::string& filename) {
     std::string backupFile = filename + ".ori.bak";
-    std::string cmd = "cp " + filename + " " + backupFile;
-    return system(cmd.c_str()) == 0;
+    try {
+        std::filesystem::copy_file(filename, backupFile, std::filesystem::copy_options::overwrite_existing);
+        return true;
+    } catch (const std::filesystem::filesystem_error& e) {
+        std::cerr << RED << "Failed to create backup: " << e.what() << RESET << std::endl;
+        return false;
+    }
 }
 
 bool OriEdit::applyChanges(const EditOperation& op) {
     if (op.safe || op.backup) {
         if (!createBackup(op.filename)) {
-            std::cerr << RED << "Failed to create backup" << RESET << std::endl;
             return false;
         }
     }
@@ -102,11 +107,14 @@ bool OriEdit::showDiff(const std::string& file1, const std::string& file2) {
 
 bool OriEdit::restoreBackup(const std::string& filename) {
     std::string backupFile = filename + ".ori.bak";
-    if (access(backupFile.c_str(), F_OK) != -1) {
-        std::string cmd = "mv " + backupFile + " " + filename;
-        if (system(cmd.c_str()) == 0) {
+    if (std::filesystem::exists(backupFile)) {
+        try {
+            std::filesystem::rename(backupFile, filename);
             std::cout << GREEN << "Backup restored successfully" << RESET << std::endl;
             return true;
+        } catch (const std::filesystem::filesystem_error& e) {
+            std::cerr << RED << "Failed to restore backup: " << e.what() << RESET << std::endl;
+            return false;
         }
     }
     std::cerr << RED << "No backup file found" << RESET << std::endl;

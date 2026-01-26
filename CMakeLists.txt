@@ -18,7 +18,6 @@ set(SOURCES
     src/core/ori_core.cpp
     src/core/ori_config.cpp
     src/core/ori_edit.cpp
-    src/plugins/orpm.cpp
     src/gui/gui.cpp
 )
 
@@ -61,10 +60,8 @@ message(STATUS "Meld is an optional dependency for graphical diffs. Install it f
 
 # Install targets
 install(TARGETS ori DESTINATION bin)
-install(FILES orpm DESTINATION bin)
 
 # Install additional data files for packaging
-install(DIRECTORY plugins/ DESTINATION share/Ori/plugins OPTIONAL)
 install(FILES LICENSE DESTINATION share/Ori)
 install(DIRECTORY include/ DESTINATION include/ori OPTIONAL)
 install(DIRECTORY www/ DESTINATION share/Ori/www OPTIONAL)

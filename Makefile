@@ -19,12 +19,9 @@ install: all
 	mkdir -p $(BIN_DIR)
 	mkdir -p $(SHARE_DIR)
 	install -D build/ori $(BIN_DIR)/ori
-	install -D orpm $(BIN_DIR)/orpm
-	cp -r plugins/* $(SHARE_DIR)/
 
 uninstall:
 	rm -f $(BIN_DIR)/ori
-	rm -f $(BIN_DIR)/orpm
 	rm -rf $(SHARE_DIR)
 
 clean:

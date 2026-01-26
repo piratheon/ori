@@ -8,9 +8,8 @@
  ▒▒▒███████▒   █████   █████ █████               █████    ▒▒████████   █████
    ▒▒▒▒▒▒▒    ▒▒▒▒▒   ▒▒▒▒▒ ▒▒▒▒▒               ▒▒▒▒▒      ▒▒▒▒▒▒▒▒   ▒▒▒▒▒
 ```
-## Ori Assistant v1.1.3
 
-A terminal‑first AI assistant for Linux with both a Text User Interface (TUI) and a web-based Graphical User Interface (GUI). Integrates with OpenRouter to access multiple LLMs. Built for developers, power users, and sysadmins who want to run AI workflows from the terminal or the browser.
+A terminal‑first AI assistant for Linux with both a Text User Interface (TUI) and a web-based Graphical User Interface (GUI). Integrates with OpenRouter (Groq and G4F will be supported soon) to access multiple LLMs. Built for developers, power users, and sysadmins who want to run AI workflows from the terminal or the browser.
 
 ## Quick links
 - Repository: https://github.com/piratheon/ori (this one)
@@ -135,12 +134,20 @@ Disable with `--no-banner`.
 Project layout:
 ```
 .
-├── build.sh
-├── CMakeLists.txt
-├── include/
-├── src/
-├── www/         # web UI assets
-└── build/       # build output
+├── build.sh               # build script
+├── CMakeLists.txt   # CMake build file
+├── install.sh             # install script
+├── aur                      # AUR  files
+├── build                   # build output
+├── include               # header files
+│   └── external       # external library headers
+├── src                      # source files
+│   ├── core             # core logic
+│   └──  gui             # GUI server code
+└── www                # GUI assets
+    ├── css
+    ├── lib
+    └── webfonts
 ```
 
 Build & iterate locally
@@ -149,6 +156,7 @@ Build & iterate locally
 Contributions, issues, and PRs welcome. Open an issue to discuss larger changes before submitting PRs. Follow standard fork → branch → PR workflow.
 
 ## Changelog (1.x.x)
+- 1.1.4 — Remove old plugin manager and files; refactor config, GUI, edits, backup/restore, and streamline main/CMakelists.
 - 1.1.3 — Fix Ctrl+C doesn't work on WebUI mode, and add a new debug option, also improve scripts to detect current distro and install deps for it.
 - 1.1.2 — New cat command to print current configurations values.
 - 1.1.1 — New slash commands, command log, keybindings, auto-retry, and code cleanup.

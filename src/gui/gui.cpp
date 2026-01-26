@@ -73,42 +73,63 @@ std::string generate_session_name(const std::string& prompt) {
     return word1 + " " + word2;
 }
 
+std::string get_mime_type(const std::string& path) {
+    auto ext_pos = path.find_last_of('.');
+    if (ext_pos != std::string::npos) {
+        std::string ext = path.substr(ext_pos + 1);
+        if (ext == "html") return "text/html";
+        if (ext == "js") return "application/javascript";
+        if (ext == "css") return "text/css";
+        if (ext == "svg") return "image/svg+xml";
+        if (ext == "png") return "image/png";
+        if (ext == "jpg" || ext == "jpeg") return "image/jpeg";
+        if (ext == "json") return "application/json";
+        if (ext == "wasm") return "application/wasm";
+    }
+    return "application/octet-stream";
+}
+
+void serve_static_file(const httplib::Request& req, httplib::Response& res) {
+    std::string path = req.path;
+    if (path == "/") {
+        path = "/index.html";
+    }
+
+    std::string file_path = "./www" + path;
+
+    if (std::filesystem::exists(file_path) && std::filesystem::is_regular_file(file_path)) {
+        std::ifstream f(file_path, std::ios::in | std::ios::binary);
+        if (f) {
+            std::ostringstream ss;
+            ss << f.rdbuf();
+            res.set_content(ss.str(), get_mime_type(file_path));
+            return;
+        }
+    }
+
+    if (path == "/index.html") {
+        const size_t content_len = _binary_index_html_end - _binary_index_html_start;
+        res.set_content(_binary_index_html_start, content_len, "text/html");
+        return;
+    }
+
+    if (path == "/favicon.svg") {
+        const size_t content_len = _binary_favicon_svg_end - _binary_favicon_svg_start;
+        res.set_content(_binary_favicon_svg_start, content_len, "image/svg+xml");
+        return;
+    }
+
+    res.status = 404;
+    res.set_content("Not Found", "text/plain");
+}
+
 void ori::start_gui(int port)
 {
     httplib::Server svr;
 
-    svr.set_mount_point("/", "./www");
+    svr.Get("/", serve_static_file);
+    svr.Get(R"((/.*\.html|/.*\.js|/.*\.css|/.*\.svg|/.*\.png|/.*\.jpg|/.*\.jpeg|/.*\.json|/.*\.wasm|/.*\.woff2|/.*\.ttf))", serve_static_file);
 
-    svr.Get("/", [](const httplib::Request&, httplib::Response& res) {
-        // Prefer serving a local copy in ./www/index.html so offline libraries
-        // placed in the `www/` directory are used. Fall back to the embedded
-        // binary index if the file is not present.
-        const std::string local_index = std::string("./www/index.html");
-        std::ifstream f(local_index, std::ios::in | std::ios::binary);
-        if (f) {
-            std::ostringstream ss;
-            ss << f.rdbuf();
-            res.set_content(ss.str(), "text/html");
-            return;
-        }
-
-        const size_t content_len = _binary_index_html_end - _binary_index_html_start;
-        res.set_content(_binary_index_html_start, content_len, "text/html");
-    });
-
-    svr.Get("/favicon.svg", [](const httplib::Request&, httplib::Response& res) {
-        const std::string local_icon = std::string("./www/favicon.svg");
-        std::ifstream f(local_icon, std::ios::in | std::ios::binary);
-        if (f) {
-            std::ostringstream ss;
-            ss << f.rdbuf();
-            res.set_content(ss.str(), "image/svg+xml");
-            return;
-        }
-
-        const size_t content_len = _binary_favicon_svg_end - _binary_favicon_svg_start;
-        res.set_content(_binary_favicon_svg_start, content_len, "image/svg+xml");
-    });
     
     svr.Get("/api/version", [](const httplib::Request &, httplib::Response &res) {
       Json::Value root;
@@ -245,83 +266,6 @@ void ori::start_gui(int port)
         }
     });
 
-    auto serve_local = [](const std::string &req_path, httplib::Response &res) -> bool {
-        std::string path = req_path;
-        if (path == "/") path = "/index.html";
-        std::string file_path = std::string("./www") + path;
-        try {
-            if (std::filesystem::exists(file_path) && std::filesystem::is_regular_file(file_path)) {
-                std::ifstream f(file_path, std::ios::in | std::ios::binary);
-                if (!f) { res.status = 500; res.set_content("Failed to open file", "text/plain"); return true; }
-                std::string content((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-                std::string mime = "application/octet-stream";
-                auto ext_pos = file_path.find_last_of('.');
-                if (ext_pos != std::string::npos) {
-                    std::string ext = file_path.substr(ext_pos + 1);
-                    if (ext == "html") mime = "text/html";
-                    else if (ext == "js") mime = "application/javascript";
-                    else if (ext == "css") mime = "text/css";
-                    else if (ext == "svg") mime = "image/svg+xml";
-                    else if (ext == "png") mime = "image/png";
-                    else if (ext == "jpg" || ext == "jpeg") mime = "image/jpeg";
-                    else if (ext == "json") mime = "application/json";
-                    else if (ext == "wasm") mime = "application/wasm";
-                }
-                res.set_content(content, mime);
-                return true;
-            }
-        } catch (const std::exception &e) {
-            res.status = 500;
-            res.set_content(std::string("Filesystem error: ") + e.what(), "text/plain");
-            return true;
-        }
-        return false;
-    };
-
-    // Serve common asset prefixes using the same local-first logic as index/favicon
-    svr.Get(R"(/js/(.*))", [&](const httplib::Request &req, httplib::Response &res){ if (serve_local(req.path, res)) return; res.status = 404; res.set_content("Not Found", "text/plain"); });
-    svr.Get(R"(/css/(.*))", [&](const httplib::Request &req, httplib::Response &res){ if (serve_local(req.path, res)) return; res.status = 404; res.set_content("Not Found", "text/plain"); });
-    svr.Get(R"(/lib/(.*))", [&](const httplib::Request &req, httplib::Response &res){ if (serve_local(req.path, res)) return; res.status = 404; res.set_content("Not Found", "text/plain"); });
-    svr.Get(R"(/vendor/(.*))", [&](const httplib::Request &req, httplib::Response &res){ if (serve_local(req.path, res)) return; res.status = 444; res.set_content("Not Found", "text/plain"); });
-    svr.Get(R"(/assets/(.*))", [&](const httplib::Request &req, httplib::Response &res){ if (serve_local(req.path, res)) return; res.status = 404; res.set_content("Not Found", "text/plain"); });
-
-    // Generic static file fallback: serve files from ./www for any other path
-    svr.Get(R"(/(.*))", [](const httplib::Request &req, httplib::Response &res) {
-        std::string req_path = req.path;
-        if (req_path == "/") req_path = "/index.html";
-        std::string file_path = std::string("./www") + req_path;
-
-        try {
-            if (std::filesystem::exists(file_path) && std::filesystem::is_regular_file(file_path)) {
-                std::ifstream f(file_path, std::ios::in | std::ios::binary);
-                if (!f) { res.status = 500; res.set_content("Failed to open file", "text/plain"); return; }
-                std::string content((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-                std::string mime = "application/octet-stream";
-                auto ext_pos = file_path.find_last_of('.');
-                if (ext_pos != std::string::npos) {
-                    std::string ext = file_path.substr(ext_pos + 1);
-                    if (ext == "html") mime = "text/html";
-                    else if (ext == "js") mime = "application/javascript";
-                    else if (ext == "css") mime = "text/css";
-                    else if (ext == "svg") mime = "image/svg+xml";
-                    else if (ext == "png") mime = "image/png";
-                    else if (ext == "jpg" || ext == "jpeg") mime = "image/jpeg";
-                    else if (ext == "json") mime = "application/json";
-                    else if (ext == "wasm") mime = "application/wasm";
-                }
-                res.set_content(content, mime);
-                return;
-            }
-        } catch (const std::exception &e) {
-            res.status = 500;
-            res.set_content(std::string("Filesystem error: ") + e.what(), "text/plain");
-            return;
-        }
-
-        res.status = 404;
-        res.set_content("Not Found", "text/plain");
-    });
-
     // Helper: test whether we can bind to a port (without leaving it bound)
     auto can_bind = [&](int test_port, int &out_errno) -> bool {
         int s = socket(AF_INET, SOCK_STREAM, 0);
@@ -350,7 +294,7 @@ void ori::start_gui(int port)
 
         // Best-effort: try to discover a process listening on that port using `ss`.
         auto find_listener = [&](int p) -> std::string {
-            std::string cmd = "ss -ltnp 2>/dev/null | grep -E 'LISTEN' | grep -w ':" + std::to_string(p) + "' || true";
+            std::string cmd = "ss -ltnp 2>/dev/null | grep -E 'LISTEN' | grep -w ':`" + std::to_string(p) + "' || true";
             FILE *fp = popen(cmd.c_str(), "r");
             if (!fp) return std::string();
             char buf[1024];

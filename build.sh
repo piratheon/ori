@@ -6,7 +6,7 @@
 set -e
 
 detect_and_offer_install() {
-    # Called with package manager id ($1) and array of packages (rest)
+    # Called with package manager i1d ($1) and array of packages (rest)
     pm="$1"; shift
     pkgs=("$@")
     missing=()

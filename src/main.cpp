@@ -1,11 +1,12 @@
 #include "ori_core.h"
-#include "orpm.h"
 #include "ori_gui.h"
 #include <iostream>
 #include <string>
 #include <vector>
 #include <fstream>
 #include <sstream>
+#include <functional>
+#include <unordered_map>
 
 const std::string SYSTEM_PROMPT = R"ORI_PROMPT(About Me: Ori
 
@@ -112,7 +113,7 @@ I am here to be your reliable partner in the terminal. Let me know what you need
 )ORI_PROMPT";
 
 void showUsage() {
-    std::cout << "ORI Terminal Assistant v1.1.3 - Linux TUI AI Assistant\n";
+    std::cout << "ORI Terminal Assistant v1.1.4 - Linux TUI AI Assistant\n";
     std::cout << "Usage: ori [options] [prompt]\n\n";
     std::cout << "Options:\n";
     std::cout << "  -h, --help              Show this help message\n";
@@ -136,7 +137,7 @@ void showUsage() {
 }
 
 void showVersion() {
-    std::cout << "ORI Terminal Assistant v1.1.3\n";
+    std::cout << "ORI Terminal Assistant v1.1.4\n";
 }
 
 void processDirectPrompt(OriAssistant& assistant, const std::string& prompt, bool auto_confirm) {
@@ -145,46 +146,7 @@ void processDirectPrompt(OriAssistant& assistant, const std::string& prompt, boo
     assistant.handleResponse(response, auto_confirm);
 }
 
-void runOrpm(int argc, char* argv[]) {
-    Orpm orpm;
-    if (!orpm.initialize()) {
-        std::cerr << "Failed to initialize orpm.\n";
-        return;
-    }
-    
-    if (argc < 3) {
-        std::cout << "Ori Plugin Manager (orpm)\n";
-        std::cout << "Use --help for available commands.\n";
-        return;
-    }
-    
-    std::string command = argv[2];
-    
-    if (command == "--orpm-install" && argc >= 4) {
-        std::string plugin_name = argv[3];
-        orpm.installPlugin(plugin_name);
-    } else if (command == "--orpm-remove" && argc >= 4) {
-        std::string plugin_name = argv[3];
-        orpm.removePlugin(plugin_name);
-    } else if (command == "--orpm-search" && argc >= 4) {
-        std::string query = argv[3];
-        orpm.searchPlugins(query);
-    } else if (command == "--orpm-list") {
-        auto plugins = orpm.listAvailablePlugins();
-        std::cout << "Available plugins:\n";
-        for (const auto& plugin : plugins) {
-            std::cout << "  " << plugin.name << " v" << plugin.version << " - " << plugin.description << "\n";
-        }
-    } else if (command == "--orpm-list-installed") {
-        auto plugins = orpm.listInstalledPlugins();
-        std::cout << "Installed plugins:\n";
-        for (const auto& plugin : plugins) {
-            std::cout << "  " << plugin.name << "\n";
-        }
-    } else {
-        std::cout << "Unknown orpm command. Use --help for available commands.\n";
-    }
-}
+
 
 int main(int argc, char* argv[]) {
     std::string executable_path = argv[0];
@@ -198,77 +160,101 @@ int main(int argc, char* argv[]) {
 
     bool auto_confirm = false;
     bool gui_mode = false;
+    bool port_specified = false;
     std::vector<std::string> args(argv + 1, argv + argc);
     std::string prompt = "";
     int prompt_start_index = -1;
 
-    for (int i = 0; i < args.size(); ++i) {
-        std::string arg = args[i];
-        if (arg == "-h" || arg == "--help") {
-            showUsage();
-            return 0;
-        } else if (arg == "-v" || arg == "--version") {
-            showVersion();
-            return 0;
-        } else if (arg == "-g" || arg == "--gui") {
-            gui_mode = true;
-        } else if (arg == "-y" || arg == "--yes") {
-            auto_confirm = true;
-        } else if (arg == "-c" || arg == "--config") {
-            if (i + 1 < args.size()) {
-                std::string config_cmd = args[i + 1];
-                if (config_cmd == "load" && i + 2 < args.size()) {
-                    assistant.configManager.loadExternalConfig(assistant.config, args[i + 2]);
-                    i += 2;
-                } else if (config_cmd == "set" && i + 3 < args.size()) {
-                    assistant.configManager.updateConfig(args[i + 2], args[i + 3]);
-                    return 0;
-                } else if (config_cmd == "cat") {
-                    // If a key was provided, print it; otherwise show available config keys
-                    if (i + 2 < args.size()) {
-                        std::string key = args[i + 2];
-                        if (key == "all") {
-                            std::string all = assistant.configManager.getAllConfig();
-                            std::cout << all << std::endl;
-                            return 0;
-                        } else {
-                            std::string val = assistant.configManager.getConfigValue(key);
-                            if (val.empty()) {
-                                std::cerr << "Unknown config key: " << key << std::endl;
-                                return 1;
-                            }
-                            std::cout << val << std::endl;
-                            return 0;
-                        }
+    std::unordered_map<std::string, std::function<int(int, const std::vector<std::string>&)>> arg_handlers;
+
+    arg_handlers["-h"] = arg_handlers["--help"] = [&](int i, const std::vector<std::string>& args) {
+        showUsage();
+        return 0;
+    };
+    arg_handlers["-v"] = arg_handlers["--version"] = [&](int i, const std::vector<std::string>& args) {
+        showVersion();
+        return 0;
+    };
+    arg_handlers["-g"] = arg_handlers["--gui"] = [&](int i, const std::vector<std::string>& args) {
+        gui_mode = true;
+        return 1;
+    };
+    arg_handlers["-y"] = arg_handlers["--yes"] = [&](int i, const std::vector<std::string>& args) {
+        auto_confirm = true;
+        return 1;
+    };
+    arg_handlers["--no-banner"] = [&](int i, const std::vector<std::string>& args) {
+        assistant.config.no_banner = true;
+        return 1;
+    };
+    arg_handlers["--no-clear"] = [&](int i, const std::vector<std::string>& args) {
+        assistant.config.no_clear = true;
+        return 1;
+    };
+    arg_handlers["-d"] = arg_handlers["--debug"] = [&](int i, const std::vector<std::string>& args) {
+        assistant.config.debug = true;
+        return 1;
+    };
+    arg_handlers["--check-for-updates"] = [&](int i, const std::vector<std::string>& args) {
+        assistant.checkForUpdates(false);
+        return 0;
+    };
+    arg_handlers["-m"] = arg_handlers["--model"] = [&](int i, const std::vector<std::string>& args) {
+        if (i + 1 < args.size()) {
+            assistant.config.model = args[i + 1];
+            return 2;
+        }
+        return 1;
+    };
+    arg_handlers["-p"] = arg_handlers["--port"] = [&](int i, const std::vector<std::string>& args) {
+        if (i + 1 < args.size()) {
+            assistant.config.port = std::stoi(args[i + 1]);
+            port_specified = true;
+            return 2;
+        }
+        return 1;
+    };
+    arg_handlers["-c"] = arg_handlers["--config"] = [&](int i, const std::vector<std::string>& args) {
+        if (i + 1 < args.size()) {
+            std::string config_cmd = args[i + 1];
+            if (config_cmd == "load" && i + 2 < args.size()) {
+                assistant.configManager.loadExternalConfig(assistant.config, args[i + 2]);
+                return 3;
+            } else if (config_cmd == "set" && i + 3 < args.size()) {
+                assistant.configManager.updateConfig(args[i + 2], args[i + 3]);
+                return 0;
+            } else if (config_cmd == "cat") {
+                if (i + 2 < args.size()) {
+                    std::string key = args[i + 2];
+                    if (key == "all") {
+                        std::string all = assistant.configManager.getAllConfig();
+                        std::cout << all << std::endl;
                     } else {
-                        std::cout << "Available config keys: port, model, no_banner, no_clear, all" << std::endl;
-                        std::cout << "Usage: --config cat <key|all>  (e.g. --config cat model)" << std::endl;
-                        return 0;
+                        std::string val = assistant.configManager.getConfigValue(key);
+                        if (val.empty()) {
+                            std::cerr << "Unknown config key: " << key << std::endl;
+                            return -1;
+                        }
+                        std::cout << val << std::endl;
                     }
+                } else {
+                    std::cout << "Available config keys: port, model, no_banner, no_clear, all" << std::endl;
+                    std::cout << "Usage: --config cat <key|all>  (e.g. --config cat model)" << std::endl;
                 }
+                return 0;
             }
-        } else if (arg == "--check-for-updates") {
-            assistant.checkForUpdates(false);
-            return 0;
-        } else if (arg == "--orpm" || arg.substr(0, 6) == "--orpm") {
-            std::cout << "ORPM is still in development and is not yet available." << std::endl;
-            return 0;
-        } else if (arg == "--no-banner") {
-            assistant.config.no_banner = true;
-        } else if (arg == "--no-clear") {
-            assistant.config.no_clear = true;
-        } else if (arg == "-m" || arg == "--model") {
-            if (i + 1 < args.size()) {
-                assistant.config.model = args[i + 1];
-                i++;
-            }
-        } else if (arg == "-p" || arg == "--port") {
-            if (i + 1 < args.size()) {
-                assistant.config.port = std::stoi(args[i + 1]);
-                i++;
-            }
-        } else if (arg == "-d" || arg == "--debug") {
-            assistant.config.debug = true;
+        }
+        return 1;
+    };
+
+    for (int i = 0; i < args.size();) {
+        std::string arg = args[i];
+        auto it = arg_handlers.find(arg);
+        if (it != arg_handlers.end()) {
+            int result = it->second(i, args);
+            if (result == 0) return 0;
+            if (result == -1) return 1;
+            i += result;
         } else {
             prompt_start_index = i;
             break;
@@ -276,7 +262,7 @@ int main(int argc, char* argv[]) {
     }
 
     // Check for --port without --gui and issue a warning
-    if (assistant.config.port != 8080 && !gui_mode) {
+    if (port_specified && !gui_mode) {
         std::cerr << YELLOW << "Warning: --port specified but --gui not enabled. Port setting will be ignored." << RESET << std::endl;
         std::cerr << YELLOW << "Please use -g or --gui to start the web UI." << RESET << std::endl;
         return 1; // Exit after warning
