@@ -12,7 +12,9 @@
 A terminal‑first AI assistant for Linux with both a Text User Interface (TUI) and a web-based Graphical User Interface (GUI). Integrates with OpenRouter (Groq and G4F will be supported soon) to access multiple LLMs. Built for developers, power users, and sysadmins who want to run AI workflows from the terminal or the browser.
 
 ## Quick links
-- Repository: https://github.com/piratheon/ori (this one)
+- GitHub: https://github.com/piratheon/ori
+- AUR: https://aur.archlinux.org/packages/ori
+- AUR-GitLab: https://gitlab.archlinux.org/piratheon/ori
 - OpenRouter keys: https://openrouter.ai/settings/keys
 
 ## Features
