@@ -11,18 +11,37 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install dependencies (openssh, pacman/makepkg)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y openssh-client ca-certificates
+          sudo apt-get install -y pacman-package-manager
+        shell: bash
+
       - name: Prepare PKGBUILD
         run: |
           cp aur/PKGBUILD .
-          makepkg --printsrcinfo > .SRCINFO  # Generate .SRCINFO from PKGBUILD
+          makepkg --printsrcinfo > .SRCINFO
+
+      - name: Set up SSH known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh-keyscan -t rsa,ecdsa,ed25519 aur.archlinux.org >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+        shell: bash
+
+      - name: Add AUR SSH key
+        uses: webfactory/ssh-agent@v0.8.1
+        with:
+          ssh-private-key: ${{ secrets.AUR_SSH_KEY }}
 
       - name: Publish to AUR
         uses: KSXGitHub/github-actions-deploy-aur@v2.7.0
         with:
           pkgname: ori
           pkgbuild: ./PKGBUILD
-          ssh_private_key: ${{ secrets.AUR_SSH_KEY }}
           commit_message: "Release ${{ github.ref_name }}"
           ssh_keyscan_types: rsa,ecdsa,ed25519
           commit_username: ${{ secrets.AUR_USERNAME }}
-          commit_email: ${{ secrets.AUR_EMAIL }}   
+          commit_email: ${{ secrets.AUR_EMAIL }}
