@@ -39,10 +39,6 @@ std::string OpenRouterProvider::sendQuery(const std::string& prompt, const std::
         message["content"] = msg.second;
         messages.append(message);
     }
-    Json::Value user_message;
-    user_message["role"] = "user";
-    user_message["content"] = prompt;
-    messages.append(user_message);
     
     request_data["messages"] = messages;
 
@@ -174,20 +170,20 @@ std::string GoogleProvider::sendQuery(const std::string& prompt, const std::vect
     Json::Value contents(Json::arrayValue);
     
     for (const auto& msg : conversation_history) {
+        if (msg.first == "system") {
+            Json::Value sys_part;
+            sys_part["text"] = msg.second;
+            request_data["system_instruction"]["parts"].append(sys_part);
+            continue;
+        }
+
         Json::Value content;
         Json::Value part;
         part["text"] = msg.second;
         content["parts"].append(part);
-        content["role"] = msg.first;
+        content["role"] = (msg.first == "assistant") ? "model" : msg.first;
         contents.append(content);
     }
-
-    Json::Value user_content;
-    Json::Value user_part;
-    user_part["text"] = prompt;
-    user_content["parts"].append(user_part);
-    user_content["role"] = "user";
-    contents.append(user_content);
 
     request_data["contents"] = contents;
 
@@ -274,7 +270,10 @@ std::string GoogleProvider::sendQuery(const std::string& prompt, const std::vect
     }
     
     if (response_json.isMember("candidates") && response_json["candidates"].isArray() && response_json["candidates"].size() > 0) {
-        return response_json["candidates"][0]["content"]["parts"][0]["text"].asString();
+        const auto& candidate = response_json["candidates"][0];
+        if (candidate.isMember("content") && candidate["content"].isMember("parts") && candidate["content"]["parts"].isArray() && candidate["content"]["parts"].size() > 0) {
+            return candidate["content"]["parts"][0]["text"].asString();
+        }
     }
 
     return "Error: Unexpected API response format - " + response_data;
@@ -304,7 +303,6 @@ std::string HuggingFaceProvider::sendQuery(const std::string& prompt, const std:
     for (const auto& msg : conversation_history) {
         inputs += msg.second + "\n";
     }
-    inputs += prompt;
     request_data["inputs"] = inputs;
     
 

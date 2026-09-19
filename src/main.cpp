@@ -152,24 +152,10 @@ void processDirectPrompt(OriAssistant& assistant, const std::string& prompt, boo
 int main(int argc, char* argv[]) {
     std::string executable_path = argv[0];
 
-    // Create a temporary assistant just to load the config to pass to MigrationManager
-    OriAssistant temp_assistant;
-    temp_assistant.configManager.loadConfig(temp_assistant.config);
-
-    const char* home_dir = getenv("HOME");
-    if (home_dir != nullptr) {
-        std::string config_dir = std::string(home_dir) + "/.config/ori";
-        MigrationManager migration_manager(config_dir, temp_assistant.config.debug);
-        migration_manager.run();
-    }
-
     OriAssistant assistant;
     assistant.setExecutablePath(executable_path);
     assistant.setSystemPrompt(SYSTEM_PROMPT);
-    if (!assistant.initialize()) {
-        std::cerr << "Failed to initialize ORI Terminal Assistant. Please check your API key configuration.\n";
-        return 1;
-    }
+    assistant.configManager.loadConfig(assistant.config);
 
     bool auto_confirm = false;
     bool gui_mode = false;
@@ -217,15 +203,22 @@ int main(int argc, char* argv[]) {
             assistant.config.active_api_config = args[i + 1];
             return 2;
         }
-        return 1;
+        std::cerr << "Error: -m/--model requires a model argument." << std::endl;
+        return -1;
     };
     arg_handlers["-p"] = arg_handlers["--port"] = [&](int i, const std::vector<std::string>& args) {
         if (i + 1 < args.size()) {
-            assistant.config.port = std::stoi(args[i + 1]);
-            port_specified = true;
-            return 2;
+            try {
+                assistant.config.port = std::stoi(args[i + 1]);
+                port_specified = true;
+                return 2;
+            } catch (...) {
+                std::cerr << "Error: Invalid port number: " << args[i + 1] << std::endl;
+                return -1;
+            }
         }
-        return 1;
+        std::cerr << "Error: -p/--port requires a port number argument." << std::endl;
+        return -1;
     };
     arg_handlers["-c"] = arg_handlers["--config"] = [&](int i, const std::vector<std::string>& args) {
         if (i + 1 < args.size()) {
@@ -255,9 +248,13 @@ int main(int argc, char* argv[]) {
                     std::cout << "Usage: --config cat <key|all>  (e.g. --config cat model)" << std::endl;
                 }
                 return 0;
+            } else {
+                std::cerr << "Error: Invalid config subcommand or missing arguments." << std::endl;
+                return -1;
             }
         }
-        return 1;
+        std::cerr << "Error: --config requires a subcommand (load, set, cat)." << std::endl;
+        return -1;
     };
 
     for (int i = 0; i < args.size();) {
@@ -287,9 +284,21 @@ int main(int argc, char* argv[]) {
     // Set global debug flag for GUI mode
     g_debug_enabled_in_gui_mode = assistant.config.debug && g_is_gui_mode;
 
+    const char* home_dir = getenv("HOME");
+    if (home_dir != nullptr) {
+        std::string config_dir = std::string(home_dir) + "/.config/ori";
+        MigrationManager migration_manager(config_dir, assistant.config.debug);
+        migration_manager.run();
+    }
+
     if (gui_mode) {
         ori::start_gui(assistant.config.port);
         return 0;
+    }
+
+    if (!assistant.initialize()) {
+        std::cerr << "Failed to initialize ORI Terminal Assistant. Please check your API key configuration.\n";
+        return 1;
     }
 
     if (prompt_start_index != -1) {

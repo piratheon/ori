@@ -50,6 +50,16 @@ extern const char _binary_index_html_start[];
 extern const char _binary_index_html_end[];
 extern const char _binary_favicon_svg_start[];
 extern const char _binary_favicon_svg_end[];
+extern const char _binary_tw_js_start[];
+extern const char _binary_tw_js_end[];
+extern const char _binary_chart_js_start[];
+extern const char _binary_chart_js_end[];
+extern const char _binary_css2_css_start[];
+extern const char _binary_css2_css_end[];
+extern const char _binary_marked_min_js_start[];
+extern const char _binary_marked_min_js_end[];
+extern const char _binary_all_min_css_start[];
+extern const char _binary_all_min_css_end[];
 
 // In-memory chat history
 std::map<std::string, std::vector<std::pair<std::string, std::string>>> chat_sessions;
@@ -107,6 +117,28 @@ void serve_static_file(const httplib::Request& req, httplib::Response& res) {
         }
     }
 
+    std::string sys_data_path = std::string(ORI_DATA_DIR) + "/www" + path;
+    if (std::filesystem::exists(sys_data_path) && std::filesystem::is_regular_file(sys_data_path)) {
+        std::ifstream f(sys_data_path, std::ios::in | std::ios::binary);
+        if (f) {
+            std::ostringstream ss;
+            ss << f.rdbuf();
+            res.set_content(ss.str(), get_mime_type(sys_data_path));
+            return;
+        }
+    }
+
+    std::string sys_data_path2 = "/usr/share/Ori/www" + path;
+    if (std::filesystem::exists(sys_data_path2) && std::filesystem::is_regular_file(sys_data_path2)) {
+        std::ifstream f(sys_data_path2, std::ios::in | std::ios::binary);
+        if (f) {
+            std::ostringstream ss;
+            ss << f.rdbuf();
+            res.set_content(ss.str(), get_mime_type(sys_data_path2));
+            return;
+        }
+    }
+
     if (path == "/index.html") {
         const size_t content_len = _binary_index_html_end - _binary_index_html_start;
         res.set_content(_binary_index_html_start, content_len, "text/html");
@@ -116,6 +148,36 @@ void serve_static_file(const httplib::Request& req, httplib::Response& res) {
     if (path == "/favicon.svg") {
         const size_t content_len = _binary_favicon_svg_end - _binary_favicon_svg_start;
         res.set_content(_binary_favicon_svg_start, content_len, "image/svg+xml");
+        return;
+    }
+
+    if (path == "/tw.js") {
+        const size_t content_len = _binary_tw_js_end - _binary_tw_js_start;
+        res.set_content(_binary_tw_js_start, content_len, "application/javascript");
+        return;
+    }
+
+    if (path == "/css2.css") {
+        const size_t content_len = _binary_css2_css_end - _binary_css2_css_start;
+        res.set_content(_binary_css2_css_start, content_len, "text/css");
+        return;
+    }
+
+    if (path == "/lib/chart.js" || path == "/chart.js") {
+        const size_t content_len = _binary_chart_js_end - _binary_chart_js_start;
+        res.set_content(_binary_chart_js_start, content_len, "application/javascript");
+        return;
+    }
+
+    if (path == "/lib/marked.min.js" || path == "/marked.min.js") {
+        const size_t content_len = _binary_marked_min_js_end - _binary_marked_min_js_start;
+        res.set_content(_binary_marked_min_js_start, content_len, "application/javascript");
+        return;
+    }
+
+    if (path == "/css/all.min.css" || path == "/all.min.css") {
+        const size_t content_len = _binary_all_min_css_end - _binary_all_min_css_start;
+        res.set_content(_binary_all_min_css_start, content_len, "text/css");
         return;
     }
 
@@ -133,7 +195,7 @@ void ori::start_gui(int port)
     
     svr.Get("/api/version", [](const httplib::Request &, httplib::Response &res) {
       Json::Value root;
-      root["version"] = "1.1.0";
+      root["version"] = "1.1.5";
       res.set_content(root.toStyledString(), "application/json");
     });
 
@@ -160,6 +222,7 @@ void ori::start_gui(int port)
     svr.Get("/api/chats", [](const httplib::Request &, httplib::Response &res) {
         Json::Value root(Json::arrayValue);
         for (const auto& session : chat_sessions) {
+            if (session.second.empty()) continue;
             Json::Value item;
             item["id"] = session.first;
             item["name"] = generate_session_name(session.second.front().first);
@@ -269,6 +332,53 @@ void ori::start_gui(int port)
             result["command_id"] = command_id;
             res.set_content(result.toStyledString(), "application/json");
         }
+    });
+
+    svr.Get("/api/exec_log", [](const httplib::Request &req, httplib::Response &res) {
+        std::string command_id = req.get_param_value("command_id");
+        Json::Value result;
+        if (running_commands.find(command_id) == running_commands.end()) {
+            result["status"] = "finished";
+            result["log"] = "";
+            res.set_content(result.toStyledString(), "application/json");
+            return;
+        }
+
+        auto& cmd = running_commands[command_id];
+        std::string log_content;
+        std::ifstream log_file(cmd.log_path);
+        if (log_file.is_open()) {
+            std::ostringstream ss;
+            ss << log_file.rdbuf();
+            log_content = ss.str();
+        }
+
+        int status = 0;
+        pid_t wait_res = waitpid(cmd.pid, &status, WNOHANG);
+        if (wait_res == cmd.pid || wait_res == -1) {
+            result["status"] = "finished";
+        } else {
+            result["status"] = "running";
+        }
+        result["log"] = log_content;
+        res.set_content(result.toStyledString(), "application/json");
+    });
+
+    svr.Post("/api/exec_kill", [](const httplib::Request &req, httplib::Response &res) {
+        Json::Value root;
+        Json::Reader reader;
+        reader.parse(req.body, root);
+        std::string command_id = root.get("command_id", "").asString();
+
+        if (running_commands.find(command_id) != running_commands.end()) {
+            auto& cmd = running_commands[command_id];
+            kill(cmd.pid, SIGKILL);
+            waitpid(cmd.pid, NULL, 0);
+            running_commands.erase(command_id);
+        }
+        Json::Value result;
+        result["status"] = "killed";
+        res.set_content(result.toStyledString(), "application/json");
     });
 
     // Helper: test whether we can bind to a port (without leaving it bound)

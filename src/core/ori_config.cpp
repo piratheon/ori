@@ -30,9 +30,9 @@ void ConfigManager::loadConfig(Config& config) {
     Json::Value root;
     file >> root;
 
-    config.port = root.get("port", 8448).asInt();
+    config.port = root.get("port", 8080).asInt();
     config.no_banner = root.get("no_banner", false).asBool();
-    config.no_clear = root.get("no_clear", true).asBool();
+    config.no_clear = root.get("no_clear", false).asBool();
     config.active_api_config = root.get("active_api_config", "migrated-openrouter").asString();
     config.auto_execute_commands_mode = root.get("auto_execute_commands_mode", "ask").asString();
     config.debug = root.get("debug", false).asBool();

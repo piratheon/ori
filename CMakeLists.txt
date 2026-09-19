@@ -93,13 +93,17 @@ add_custom_command(
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/www
     DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/www/tw.js
 )
+target_sources(ori PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/tw.js.o)
+
 # Embed chart.js into the executable
 add_custom_command(
     OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/chart.js.o
     COMMAND objcopy --input-target binary --output-target elf64-x86-64 --binary-architecture i386:x86-64 chart.js ${CMAKE_CURRENT_BINARY_DIR}/chart.js.o
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/www
-    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/www/chart.js
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/www/lib
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/www/lib/chart.js
 )
+target_sources(ori PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/chart.js.o)
+
 # Embed css2.css into the executable
 add_custom_command(
     OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/css2.css.o
@@ -107,20 +111,24 @@ add_custom_command(
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/www
     DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/www/css2.css
 )
+target_sources(ori PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/css2.css.o)
+
 # Embed marked.min.js into the executable
 add_custom_command(
     OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/marked.min.js.o
     COMMAND objcopy --input-target binary --output-target elf64-x86-64 --binary-architecture i386:x86-64 marked.min.js ${CMAKE_CURRENT_BINARY_DIR}/marked.min.js.o
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/www
-    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/www/marked.min.js
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/www/lib
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/www/lib/marked.min.js
 )
+target_sources(ori PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/marked.min.js.o)
+
 # Embed all.min.css into the executable
 add_custom_command(
     OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/all.min.css.o
     COMMAND objcopy --input-target binary --output-target elf64-x86-64 --binary-architecture i386:x86-64 all.min.css ${CMAKE_CURRENT_BINARY_DIR}/all.min.css.o
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/www
-    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/www/all.min.css
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/www/css
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/www/css/all.min.css
 )
-target_sources(ori PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/favicon.svg.o)
+target_sources(ori PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/all.min.css.o)
 # Provide a CMake install config (optional simple staging)
 include(GNUInstallDirs)

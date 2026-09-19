@@ -172,10 +172,18 @@ void MigrationManager::firstTimeSetup() {
             }
         }
 
-        // Copy keys.json.example from project root to config directory
-        std::string project_root_example_path = "keys.json.example"; // Assumes project root is CWD
+        // Copy keys.json.example to config directory
+        std::string project_root_example_path = "keys.json.example";
         if (!fs::exists(project_root_example_path)) {
-            if (debug_enabled) std::cerr << RED << "Error: keys.json.example not found in project root (" << project_root_example_path << "). Cannot create example config." << RESET << std::endl;
+            std::string sys_example_path = std::string(ORI_DATA_DIR) + "/keys.json.example";
+            if (fs::exists(sys_example_path)) {
+                project_root_example_path = sys_example_path;
+            } else if (fs::exists("/usr/share/Ori/keys.json.example")) {
+                project_root_example_path = "/usr/share/Ori/keys.json.example";
+            }
+        }
+        if (!fs::exists(project_root_example_path)) {
+            if (debug_enabled) std::cerr << RED << "Error: keys.json.example not found. Cannot create example config." << RESET << std::endl;
             return;
         }
 
