@@ -82,7 +82,7 @@ std::string OpenRouterProvider::sendQuery(const std::string& prompt, const std::
         response_data.clear();
         keep_running = true;
         std::thread spinner_thread;
-        if (!g_is_gui_mode) {
+        if (g_is_interactive_mode && !g_is_gui_mode) {
             spinner_thread = std::thread(run_spinner, spinner_message);
         }
         

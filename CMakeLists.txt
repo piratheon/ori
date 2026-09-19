@@ -51,6 +51,8 @@ set(SOURCES
     src/core/ori_edit.cpp
     src/core/ori_migration.cpp
     src/core/ori_provider.cpp
+    src/core/ori_agents.cpp
+    src/core/ori_task.cpp
     src/gui/gui.cpp
 )
 
