@@ -18,6 +18,10 @@
 #include <fcntl.h>
 #include <sys/wait.h>
 
+#ifndef ORI_VERSION
+#define ORI_VERSION "0.0"
+#endif
+
 std::atomic<bool> keep_running{true};
 bool g_is_gui_mode = false;
 bool g_debug_enabled_in_gui_mode = false; // New global flag for GUI debug logging
@@ -554,7 +558,7 @@ void OriAssistant::showBanner() {
  ▒▒▒███████▒   █████   █████ █████               █████    ▒▒████████   █████
    ▒▒▒▒▒▒▒    ▒▒▒▒▒   ▒▒▒▒▒ ▒▒▒▒▒               ▒▒▒▒▒      ▒▒▒▒▒▒▒▒   ▒▒▒▒▒
 )" << RESET << std::endl;
-        std::cout << BOLD << BLUE << "ORI Terminal Assistant v1.1.5" << RESET << "\n";
+        std::cout << BOLD << BLUE << "ORI Terminal Assistant v" << ORI_VERSION << RESET << "\n";
         // Single newline after instructions to avoid empty-space gap
         std::cout << "Type '/help' for available commands or '/quit' to exit.\n";
     }
@@ -927,11 +931,12 @@ void OriAssistant::checkForUpdates(bool silent) {
 
         if (res == CURLE_OK) {
             std::ifstream version_file(".version");
-            std::string current_version = "1.1.5";
+            std::string current_version = ORI_VERSION;
             if (version_file.is_open()) {
                 std::getline(version_file, current_version);
                 version_file.close();
             }
+            if (current_version.empty()) current_version = ORI_VERSION;
             remote_version.erase(remote_version.find_last_not_of(" \n\r\t")+1);
             if (current_version != remote_version) {
                 if (silent) {

@@ -12,7 +12,23 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-echo -e "${BLUE}ORI Terminal Assistant Installation Script${NC}"
+# Version resolution function
+get_version() {
+    if [ -n "${ORI_VERSION:-}" ]; then
+        echo "$ORI_VERSION"
+    elif [ -n "${VERSION:-}" ]; then
+        echo "$VERSION"
+    elif [ -f ".version" ] && [ -n "$(tr -d ' \n\r\t' < .version 2>/dev/null)" ]; then
+        tr -d ' \n\r\t' < .version
+    else
+        echo "0.0"
+    fi
+}
+
+VERSION=$(get_version)
+export ORI_VERSION="$VERSION"
+
+echo -e "${BLUE}ORI Terminal Assistant Installation Script (v${VERSION})${NC}"
 echo "================================================="
 
 # Check if we're in the right directory
@@ -25,17 +41,17 @@ fi
 install_deps_apt() {
     echo -e "${YELLOW}Detected apt (Debian/Ubuntu). Installing dependencies...${NC}"
     sudo apt-get update
-    sudo apt-get install -y build-essential cmake libjsoncpp-dev libcurl4-openssl-dev
+    sudo apt-get install -y build-essential cmake libcurl4-openssl-dev
 }
 
 install_deps_dnf() {
     echo -e "${YELLOW}Detected dnf (Fedora). Installing dependencies...${NC}"
-    sudo dnf install -y @development-tools cmake jsoncpp-devel libcurl-devel
+    sudo dnf install -y @development-tools cmake libcurl-devel
 }
 
 install_deps_pacman() {
     echo -e "${YELLOW}Detected pacman (Arch). Installing dependencies...${NC}"
-    sudo pacman -Syu --noconfirm base-devel cmake jsoncpp curl
+    sudo pacman -Syu --noconfirm base-devel cmake curl
 }
 
 # Detect distro/package manager and install deps if possible
@@ -54,11 +70,11 @@ else
 fi
 
 # Build step (out-of-source build)
-echo -e "${BLUE}Configuring and building project...${NC}"
+echo -e "${BLUE}Configuring and building project (v${VERSION})...${NC}"
 BUILD_DIR="build"
 mkdir -p "$BUILD_DIR"
 cd "$BUILD_DIR"
-cmake ..
+cmake .. -DORI_VERSION="${VERSION}"
 make -j"$(nproc)"
 cd ..
 
@@ -66,7 +82,6 @@ cd ..
 if [ "$PM" = "pacman" ]; then
     echo -e "${YELLOW}pacman detected. Building Arch Linux package...${NC}"
     if command -v makepkg >/dev/null 2>&1; then
-        # If PKGBUILD exists, prefer makepkg; otherwise fallback to make package if provided by Makefile
         if [ -f "PKGBUILD" ]; then
             echo -e "${BLUE}Using makepkg to build package from PKGBUILD...${NC}"
             (cd "$BUILD_DIR" && makepkg --printsrcinfo > /dev/null 2>&1) || true
@@ -82,7 +97,7 @@ if [ "$PM" = "pacman" ]; then
     fi
 else
     echo -e "${YELLOW}Performing standard installation (make install)...${NC}"
-    sudo make install
+    sudo make install -C "$BUILD_DIR"
     echo -e "${GREEN}Installation complete!${NC}"
 fi
 
@@ -92,7 +107,7 @@ mkdir -p "$HOME/.config/ori"
 
 echo ""
 echo -e "${GREEN}================================================="
-echo -e "ORI Terminal Assistant is now installed!${NC}"
+echo -e "ORI Terminal Assistant v${VERSION} is now installed!${NC}"
 echo -e "=================================================${NC}"
 echo ""
 echo -e "${BLUE}Usage:${NC}"

@@ -24,16 +24,40 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake g++ libjsoncpp-dev libcurl4-openssl-dev
+          sudo apt-get install -y build-essential cmake g++ libcurl4-openssl-dev
+
+      - name: Determine Version
+        id: get_version
+        run: |
+          TAG_INPUT="${{ github.event.inputs.tag_name }}"
+          REF_NAME="${{ github.ref_name }}"
+
+          if [ -n "$TAG_INPUT" ]; then
+            RAW_VER="$TAG_INPUT"
+          elif [[ "$REF_NAME" == v* ]]; then
+            RAW_VER="$REF_NAME"
+          elif [ -f .version ] && [ -n "$(tr -d ' \n\r\t' < .version 2>/dev/null)" ]; then
+            RAW_VER=$(tr -d ' \n\r\t' < .version)
+          else
+            RAW_VER="0.0"
+          fi
+
+          CLEAN_VER=$(echo "$RAW_VER" | sed -E 's/^[vV]//' | sed -E 's/-pre.*//')
+          if [ -z "$CLEAN_VER" ]; then
+            CLEAN_VER="0.0"
+          fi
+
+          echo "VERSION=${CLEAN_VER}" >> $GITHUB_ENV
+          echo "RAW_TAG=${RAW_VER}" >> $GITHUB_ENV
+          echo "Resolved release version: ${CLEAN_VER} (tag: ${RAW_VER})"
 
       - name: Build Ori
         run: |
           chmod +x build.sh
-          ./build.sh
+          ORI_VERSION="${VERSION}" ./build.sh
 
       - name: Prepare Release Asset
         run: |
-          VERSION=$(cat .version 2>/dev/null || echo "1.1.5")
           mkdir -p dist
           cp build/ori dist/ori-linux_x86-64-v${VERSION}.bin
           cp build/ori dist/ori
@@ -42,8 +66,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           prerelease: true
-          tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
-          name: "Ori Pre-release ${{ github.event.inputs.tag_name || github.ref_name }}"
+          tag_name: ${{ env.RAW_TAG }}
+          name: "Ori Pre-release v${{ env.VERSION }}"
           files: |
             dist/ori-linux_x86-64-v*.bin
             dist/ori

@@ -9,6 +9,10 @@
 #include <functional>
 #include <unordered_map>
 
+#ifndef ORI_VERSION
+#define ORI_VERSION "0.0"
+#endif
+
 const std::string SYSTEM_PROMPT = R"ORI_PROMPT(About Me: Ori
 
 I am Ori, an AI assistant created by the developper named Piratheon. I am designed to be a powerful and versatile assistant, operating directly within your command-line interface to help you with a wide range of tasks.
@@ -114,11 +118,12 @@ I am here to be your reliable partner in the terminal. Let me know what you need
 )ORI_PROMPT";
 
 void showUsage() {
-    std::cout << "ORI Terminal Assistant v1.1.5 - Linux TUI AI Assistant\n";
+    std::cout << "ORI Terminal Assistant v" << ORI_VERSION << " - Linux TUI AI Assistant\n";
     std::cout << "Usage: ori [options] [prompt]\n\n";
     std::cout << "Options:\n";
     std::cout << "  -h, --help              Show this help message\n";
     std::cout << "  -v, --version           Show version information\n";
+    std::cout << "      --info, --status    Show system diagnostics and configuration status\n";
     std::cout << "  -g, --gui               Start the web UI\n";
     std::cout << "  -y, --yes               Auto-confirm any command execution prompts\n";
     std::cout << "  -c, --config <command>  Manage configuration\n";
@@ -130,7 +135,7 @@ void showUsage() {
     std::cout << "  --no-clear              Load Ori without clearing the terminal\n";
     std::cout << "  -m, --model <model_name>      Specify the AI model to use (overrides config)\n";
     std::cout << "  -p, --port <port_number>      Specify the port for the GUI (overrides config)\n";
-    std::cout << "  -d, --debug             Enable debug logging\n"; // Added debug flag
+    std::cout << "  -d, --debug             Enable debug logging\n";
     std::cout << "\nShell Integration Examples:\n";
     std::cout << "  ori -y 'install nmap for me'\n";
     std::cout << "  ori print current active username\n";
@@ -138,7 +143,47 @@ void showUsage() {
 }
 
 void showVersion() {
-    std::cout << "ORI Terminal Assistant v1.1.5\n";
+    std::cout << "ORI Terminal Assistant v" << ORI_VERSION << "\n";
+}
+
+void showInfo(OriAssistant& assistant) {
+    std::cout << "ORI Terminal Assistant System Diagnostics & Info\n";
+    std::cout << "----------------------------------------------\n";
+    std::cout << "Version:         " << ORI_VERSION << "\n";
+    std::cout << "Build Target:    Linux x86_64\n";
+#if defined(__GNUG__)
+    std::cout << "Compiler:        GCC " << __GNUC__ << "." << __GNUC_MINOR__ << "." << __GNUC_PATCHLEVEL__ << "\n";
+#elif defined(__clang__)
+    std::cout << "Compiler:        Clang " << __clang_version__ << "\n";
+#endif
+    std::cout << "C++ Standard:    " << __cplusplus << "\n";
+
+    const char* home = std::getenv("HOME");
+    if (home) {
+        std::string config_dir = std::string(home) + "/.config/ori";
+        std::cout << "Config Dir:      " << config_dir << "\n";
+
+        std::ifstream cfile(config_dir + "/config.json");
+        std::cout << "  config.json:   " << (cfile.is_open() ? "Present" : "Missing") << "\n";
+
+        std::ifstream kfile(config_dir + "/keys.json");
+        std::cout << "  keys.json:     " << (kfile.is_open() ? "Present" : "Missing") << "\n";
+    }
+
+    std::cout << "Active Config:   " << (assistant.config.active_api_config.empty() ? "None" : assistant.config.active_api_config) << "\n";
+    std::cout << "GUI Port:        " << assistant.config.port << "\n";
+    std::cout << "Auto-exec Mode:  " << assistant.config.auto_execute_commands_mode << "\n";
+#ifdef CURL_FOUND
+    std::cout << "libcurl:         Enabled\n";
+#else
+    std::cout << "libcurl:         Disabled\n";
+#endif
+#ifdef JSONCPP_FOUND
+    std::cout << "jsoncpp:         Enabled\n";
+#else
+    std::cout << "jsoncpp:         Disabled\n";
+#endif
+    std::cout << "----------------------------------------------\n";
 }
 
 void processDirectPrompt(OriAssistant& assistant, const std::string& prompt, bool auto_confirm) {
@@ -146,8 +191,6 @@ void processDirectPrompt(OriAssistant& assistant, const std::string& prompt, boo
     std::string response = assistant.sendQuery(prompt);
     assistant.handleResponse(response, auto_confirm);
 }
-
-
 
 int main(int argc, char* argv[]) {
     std::string executable_path = argv[0];
@@ -172,6 +215,10 @@ int main(int argc, char* argv[]) {
     };
     arg_handlers["-v"] = arg_handlers["--version"] = [&](int i, const std::vector<std::string>& args) {
         showVersion();
+        return 0;
+    };
+    arg_handlers["--info"] = arg_handlers["--status"] = [&](int i, const std::vector<std::string>& args) {
+        showInfo(assistant);
         return 0;
     };
     arg_handlers["-g"] = arg_handlers["--gui"] = [&](int i, const std::vector<std::string>& args) {
