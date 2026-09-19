@@ -9,6 +9,7 @@
 #include "ori_provider.h"
 #include "ori_agents.h"
 #include "ori_task.h"
+#include "ori_skills.h"
 #include <json/json.h> // Include for Json::Value
 
 #ifdef CURL_FOUND
@@ -27,6 +28,9 @@ struct Config {
     std::string active_api_config;
     std::string auto_execute_commands_mode; // Added for /autoexec command
     bool debug; // Added debug flag
+    bool rag_memory_enabled;
+    bool skills_memory_enabled;
+    bool show_command_output;
 
     Config();
 };
@@ -79,6 +83,12 @@ struct ProviderInfo {
     Json::Value details; // Stores the full JSON entry from keys.json
 };
 
+struct UndoSnapshot {
+    size_t history_size = 0;
+    std::string git_commit_hash;
+    bool has_git_commit = false;
+};
+
 class OriAssistant {
 private:
     std::string executable_path;
@@ -93,6 +103,7 @@ private:
     std::map<std::string, ProviderInfo> providers_info;
     APIProvider* active_provider = nullptr;
     std::vector<ChatMessage> conversation_history;
+    std::vector<UndoSnapshot> undo_snapshots;
 
 
 public:
@@ -100,6 +111,8 @@ public:
     ConfigManager configManager;
     AgentsManager agentsManager;
     TaskDispatcher taskDispatcher;
+    SkillsManager skillsManager;
+    RAGMemory ragMemory;
     
 public:
         
@@ -118,6 +131,8 @@ public:
     void checkForUpdates(bool silent);
     void setSystemPrompt(const std::string& prompt);
     std::string sendQuery(const std::string& prompt);
+    bool gitBackupCommit(std::string& out_commit_hash);
+    bool performUndo();
 };
 
 #endif // ORI_CORE_H
