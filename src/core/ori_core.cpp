@@ -709,10 +709,6 @@ void OriAssistant::handleResponse(const std::string& response, bool auto_confirm
 
             current_pos = edit_end + strlen("[/edit]");
             continue;
-        #include <filesystem>
-
-// ... (rest of the file)
-
         } else if (next_tag == WRITEFILE) {
             // Handle writefile block
             if (writefile_end == std::string::npos) break; // malformed
