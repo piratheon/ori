@@ -436,11 +436,11 @@ bool OriAssistant::initialize() {
             }
         }
         if (!found_model) {
-            // Fallback to the first available provider and set its model override
-            active_provider = providers_info.begin()->second.provider.get();
-            if (active_provider) {
-                active_provider->setModel(config.active_api_config);
-            }
+            // Fallback to the first available provider using its own configured model & ID
+            auto first_it = providers_info.begin();
+            active_provider = first_it->second.provider.get();
+            config.active_api_config = first_it->first;
+            configManager.saveConfig(config);
         }
     }
     
