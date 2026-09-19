@@ -5,8 +5,48 @@
 
 set -e
 
+# Version resolution function:
+# 1. Environment variable ORI_VERSION or VERSION
+# 2. Text file .version in project root
+# 3. Fallback to 0.0
+get_version() {
+    if [ -n "${ORI_VERSION:-}" ]; then
+        echo "$ORI_VERSION"
+    elif [ -n "${VERSION:-}" ]; then
+        echo "$VERSION"
+    elif [ -f ".version" ] && [ -n "$(tr -d ' \n\r\t' < .version 2>/dev/null)" ]; then
+        tr -d ' \n\r\t' < .version
+    else
+        echo "0.0"
+    fi
+}
+
+VERSION=$(get_version)
+export ORI_VERSION="$VERSION"
+
+# Handle arguments
+CLEAN_BUILD=false
+for arg in "$@"; do
+    case "$arg" in
+        --clean)
+            CLEAN_BUILD=true
+            ;;
+        --help|-h)
+            echo "Usage: $0 [options]"
+            echo "Options:"
+            echo "  --clean    Remove existing build directory before building"
+            echo "  --help, -h Show this help message"
+            exit 0
+            ;;
+    esac
+done
+
+if [ "$CLEAN_BUILD" = true ]; then
+    echo "Cleaning build directory..."
+    rm -rf build
+fi
+
 detect_and_offer_install() {
-    # Called with package manager i1d ($1) and array of packages (rest)
     pm="$1"; shift
     pkgs=("$@")
     missing=()
@@ -85,17 +125,15 @@ echo "Package manager detected: $PM"
 # Define required packages per distro
 case "$PM" in
     apt)
-        REQUIRED_PACKAGES=(libjsoncpp-dev libcurl4-openssl-dev build-essential cmake)
+        REQUIRED_PACKAGES=(libcurl4-openssl-dev build-essential cmake)
         detect_and_offer_install apt "${REQUIRED_PACKAGES[@]}"
         ;;
     dnf)
-        # On Fedora package names: jsoncpp-devel libcurl-devel @development-tools cmake
-        REQUIRED_PACKAGES=(jsoncpp-devel libcurl-devel "@development-tools" cmake)
+        REQUIRED_PACKAGES=(libcurl-devel "@development-tools" cmake)
         detect_and_offer_install dnf "${REQUIRED_PACKAGES[@]}"
         ;;
     pacman)
-        # Arch packages: jsoncpp curl base-devel cmake
-        REQUIRED_PACKAGES=(jsoncpp curl base-devel cmake)
+        REQUIRED_PACKAGES=(curl base-devel cmake)
         detect_and_offer_install pacman "${REQUIRED_PACKAGES[@]}"
         ;;
     *)
@@ -103,20 +141,16 @@ case "$PM" in
         ;;
 esac
 
-# Create build directory if it doesn't exist
-echo "Creating build directory..."
-mkdir -p build
+echo "Building Ori Assistant v${VERSION}..."
 
-# Change to build directory
+mkdir -p build
 cd build
 
-# Configure with CMake
 echo "Configuring with CMake..."
-cmake ..
+cmake .. -DORI_VERSION="${VERSION}"
 
-# Build the project
 echo "Building Ori Assistant..."
 make -j"$(nproc)"
 
 echo "Build successful!"
-echo "The 'ori' executable is now in the 'build' directory."
+echo "The 'ori' executable (v${VERSION}) is now in the 'build' directory."

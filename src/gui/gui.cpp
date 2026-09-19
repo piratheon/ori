@@ -18,6 +18,10 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+#ifndef ORI_VERSION
+#define ORI_VERSION "0.0"
+#endif
+
 #define CPPHTTPLIB_OPENSSL_SUPPORT
 #define SERVER_CERT_FILE "cert.pem"
 #define SERVER_PRIVATE_KEY_FILE "key.pem"
@@ -195,7 +199,7 @@ void ori::start_gui(int port)
     
     svr.Get("/api/version", [](const httplib::Request &, httplib::Response &res) {
       Json::Value root;
-      root["version"] = "1.1.5";
+      root["version"] = ORI_VERSION;
       res.set_content(root.toStyledString(), "application/json");
     });
 

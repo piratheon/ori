@@ -1,16 +1,47 @@
 cmake_minimum_required(VERSION 3.10)
-project(OriAssistant)
+
+# Resolve project version:
+# Priority 1: Environment variable ORI_VERSION or VERSION
+# Priority 2: File .version in source root
+# Priority 3: Fallback "0.0"
+if(DEFINED ENV{ORI_VERSION} AND NOT "$ENV{ORI_VERSION}" STREQUAL "")
+    set(ORI_VERSION "$ENV{ORI_VERSION}")
+elseif(DEFINED ENV{VERSION} AND NOT "$ENV{VERSION}" STREQUAL "")
+    set(ORI_VERSION "$ENV{VERSION}")
+elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.version")
+    file(READ "${CMAKE_CURRENT_SOURCE_DIR}/.version" ORI_VER_RAW)
+    string(STRIP "${ORI_VER_RAW}" ORI_VER_CLEAN)
+    if(NOT "${ORI_VER_CLEAN}" STREQUAL "")
+        set(ORI_VERSION "${ORI_VER_CLEAN}")
+    else()
+        set(ORI_VERSION "0.0")
+    endif()
+else()
+    set(ORI_VERSION "0.0")
+endif()
+
+# Clean version for CMake project declaration (digits and dots)
+string(REGEX REPLACE "^[vV]" "" ORI_SEMVER "${ORI_VERSION}")
+if(NOT ORI_SEMVER MATCHES "^[0-9]")
+    set(ORI_SEMVER "0.0")
+endif()
+
+project(OriAssistant VERSION ${ORI_SEMVER})
 
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Define installation data directory
+# Define installation data directory and version string
 set(ORI_DATA_DIR "/usr/share/ori")
 add_definitions(-DORI_DATA_DIR="${ORI_DATA_DIR}")
+add_definitions(-DORI_VERSION="${ORI_VERSION}")
 
 # Add include directories
 include_directories(include include/external)
+
+# Option for embedded JsonCpp
+option(USE_STATIC_JSONCPP "Embed JsonCpp directly into executable for maximum portability" ON)
 
 # Source files
 set(SOURCES
@@ -23,42 +54,42 @@ set(SOURCES
     src/gui/gui.cpp
 )
 
+if(USE_STATIC_JSONCPP)
+    message(STATUS "Using embedded static JsonCpp for portable build (ORI_VERSION: ${ORI_VERSION})")
+    list(APPEND SOURCES src/external/jsoncpp.cpp)
+    add_definitions(-DJSONCPP_FOUND)
+endif()
+
 # Create executable
 add_executable(ori ${SOURCES})
 
 # Find required packages
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(JSONCPP REQUIRED jsoncpp)
-pkg_check_modules(CURL REQUIRED libcurl)
 
-# Include directories and compile definitions
-if(JSONCPP_FOUND)
-    target_include_directories(ori PRIVATE ${JSONCPP_INCLUDE_DIRS})
-    target_compile_definitions(ori PRIVATE JSONCPP_FOUND)
-else()
-    message(FATAL_ERROR "jsoncpp is required to build ORI")
+if(NOT USE_STATIC_JSONCPP)
+    pkg_check_modules(JSONCPP REQUIRED jsoncpp)
+    if(JSONCPP_FOUND)
+        target_include_directories(ori PRIVATE ${JSONCPP_INCLUDE_DIRS})
+        target_compile_definitions(ori PRIVATE JSONCPP_FOUND)
+        target_link_libraries(ori PRIVATE ${JSONCPP_LIBRARIES})
+    else()
+        message(FATAL_ERROR "jsoncpp is required to build ORI")
+    endif()
 endif()
 
+pkg_check_modules(CURL REQUIRED libcurl)
 if(CURL_FOUND)
     target_include_directories(ori PRIVATE ${CURL_INCLUDE_DIRS})
     target_compile_definitions(ori PRIVATE CURL_FOUND)
+    target_link_libraries(ori PRIVATE ${CURL_LIBRARIES})
 else()
     message(FATAL_ERROR "libcurl is required to build ORI")
 endif()
 
-# Link libraries
-target_link_libraries(ori PRIVATE ${JSONCPP_LIBRARIES} ${CURL_LIBRARIES} stdc++fs pthread)
-
-# Additional libraries that might be needed
-# find_package(CURL)
-# if(CURL_FOUND)
-#     target_link_libraries(ori ${CURL_LIBRARIES})
-# endif()
+# Link standard libraries
+target_link_libraries(ori PRIVATE stdc++fs pthread)
 
 message(STATUS "Meld is an optional dependency for graphical diffs. Install it for enhanced compare functionality.")
-
-# Copy system prompt into build directory
-
 
 # Install targets
 install(TARGETS ori DESTINATION bin)
@@ -130,5 +161,6 @@ add_custom_command(
     DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/www/css/all.min.css
 )
 target_sources(ori PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/all.min.css.o)
-# Provide a CMake install config (optional simple staging)
+
+# Provide a CMake install config
 include(GNUInstallDirs)
