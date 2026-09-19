@@ -315,6 +315,11 @@ std::string OriAssistant::sendQuery(const std::string& prompt) {
     if (!active_provider) {
         return colorize(RED, "Error: No active API provider is configured.");
     }
+
+    if (config.debug) {
+        std::cerr << "[DEBUG] Active API Config / Model: " << config.active_api_config << "\n";
+        std::cerr << "[DEBUG] Prompt: " << prompt << "\n";
+    }
     
     conversation_history.push_back({"user", prompt});
     
@@ -417,10 +422,22 @@ bool OriAssistant::initialize() {
     if (it != providers_info.end()) {
         active_provider = it->second.provider.get();
     } else {
-        // Fallback to the first available provider
-        active_provider = providers_info.begin()->second.provider.get();
-        config.active_api_config = providers_info.begin()->first;
-        configManager.saveConfig(config);
+        // Search if any provider entry has this model name
+        bool found_model = false;
+        for (auto& pair : providers_info) {
+            if (pair.second.details.isMember("model") && pair.second.details["model"].asString() == config.active_api_config) {
+                active_provider = pair.second.provider.get();
+                found_model = true;
+                break;
+            }
+        }
+        if (!found_model) {
+            // Fallback to the first available provider and set its model override
+            active_provider = providers_info.begin()->second.provider.get();
+            if (active_provider) {
+                active_provider->setModel(config.active_api_config);
+            }
+        }
     }
     
     return true;
