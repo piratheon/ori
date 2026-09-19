@@ -3,7 +3,6 @@ aur/*.*
 aur/pkg/
 aur/src/
 backup/
-.github/
 ToDo.md
 note.md
 rmsg.md

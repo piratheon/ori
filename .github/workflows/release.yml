@@ -1,0 +1,50 @@
+name: Release Pre-release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag name for pre-release (e.g. v1.1.5-pre)'
+        required: true
+        default: 'v1.1.5-pre'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake g++ libjsoncpp-dev libcurl4-openssl-dev
+
+      - name: Build Ori
+        run: |
+          chmod +x build.sh
+          ./build.sh
+
+      - name: Prepare Release Asset
+        run: |
+          VERSION=$(cat .version 2>/dev/null || echo "1.1.5")
+          mkdir -p dist
+          cp build/ori dist/ori-linux_x86-64-v${VERSION}.bin
+          cp build/ori dist/ori
+
+      - name: Create GitHub Pre-Release
+        uses: softprops/action-gh-release@v2
+        with:
+          prerelease: true
+          tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
+          name: "Ori Pre-release ${{ github.event.inputs.tag_name || github.ref_name }}"
+          files: |
+            dist/ori-linux_x86-64-v*.bin
+            dist/ori
+          draft: false
