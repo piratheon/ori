@@ -1,24 +1,34 @@
 cmake_minimum_required(VERSION 3.10)
 
-# Resolve project version:
-# Priority 1: Environment variable ORI_VERSION or VERSION
-# Priority 2: File .version in source root
-# Priority 3: Fallback "0.0"
-if(DEFINED ENV{ORI_VERSION} AND NOT "$ENV{ORI_VERSION}" STREQUAL "")
+# Resolve project version (first match wins):
+# Priority 1: -DORI_VERSION=<x> on the cmake command line (cache variable)
+# Priority 2: Environment variable ORI_VERSION or VERSION
+# Priority 3: File .version in source root
+# Priority 4: Fallback "0.0"
+if(DEFINED ORI_VERSION AND NOT "${ORI_VERSION}" STREQUAL "")
+    # Provided explicitly with -DORI_VERSION=...; keep it as-is.
+    set(ORI_VERSION_SOURCE "-DORI_VERSION")
+elseif(DEFINED ENV{ORI_VERSION} AND NOT "$ENV{ORI_VERSION}" STREQUAL "")
     set(ORI_VERSION "$ENV{ORI_VERSION}")
+    set(ORI_VERSION_SOURCE "environment (ORI_VERSION)")
 elseif(DEFINED ENV{VERSION} AND NOT "$ENV{VERSION}" STREQUAL "")
     set(ORI_VERSION "$ENV{VERSION}")
+    set(ORI_VERSION_SOURCE "environment (VERSION)")
 elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.version")
     file(READ "${CMAKE_CURRENT_SOURCE_DIR}/.version" ORI_VER_RAW)
     string(STRIP "${ORI_VER_RAW}" ORI_VER_CLEAN)
     if(NOT "${ORI_VER_CLEAN}" STREQUAL "")
         set(ORI_VERSION "${ORI_VER_CLEAN}")
+        set(ORI_VERSION_SOURCE ".version")
     else()
         set(ORI_VERSION "0.0")
+        set(ORI_VERSION_SOURCE "fallback (.version is empty)")
     endif()
 else()
     set(ORI_VERSION "0.0")
+    set(ORI_VERSION_SOURCE "fallback")
 endif()
+message(STATUS "ORI_VERSION = ${ORI_VERSION} (from ${ORI_VERSION_SOURCE})")
 
 # Clean version for CMake project declaration (digits and dots)
 string(REGEX REPLACE "^[vV]" "" ORI_SEMVER "${ORI_VERSION}")

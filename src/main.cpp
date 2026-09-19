@@ -127,6 +127,7 @@ void showUsage() {
     std::cout << "      --info, --status    Show system diagnostics and configuration status\n";
     std::cout << "  -g, --gui               Start the web UI\n";
     std::cout << "  -y, --yes               Auto-confirm any command execution prompts\n";
+    std::cout << "      --init              Initialize the current directory as an Ori project (enables git snapshots for /undo)\n";
     std::cout << "  -c, --config <command>  Manage configuration\n";
     std::cout << "                            load <path>  Load a configuration from a file\n";
     std::cout << "                            set <key> <value>  Set a configuration value\n";
@@ -174,6 +175,8 @@ void showInfo(OriAssistant& assistant) {
     std::cout << "Active Config:   " << (assistant.config.active_api_config.empty() ? "None" : assistant.config.active_api_config) << "\n";
     std::cout << "GUI Port:        " << assistant.config.port << "\n";
     std::cout << "Auto-exec Mode:  " << assistant.config.auto_execute_commands_mode << "\n";
+    std::cout << "Git Backup:      " << (assistant.config.git_backup_enabled ? "ON" : "OFF")
+              << (assistant.isProjectInitialized() ? " (project initialized)" : " (project not initialized; run /init or --init)") << "\n";
 #ifdef CURL_FOUND
     std::cout << "libcurl:         Enabled\n";
 #else
@@ -229,6 +232,13 @@ int main(int argc, char* argv[]) {
     arg_handlers["-y"] = arg_handlers["--yes"] = [&](int i, const std::vector<std::string>& args) {
         auto_confirm = true;
         return 1;
+    };
+    arg_handlers["--init"] = [&](int i, const std::vector<std::string>& args) {
+        bool yes = auto_confirm;
+        for (const auto& a : args) {
+            if (a == "-y" || a == "--yes") yes = true;
+        }
+        return assistant.initProject(yes) ? 0 : -1;
     };
     arg_handlers["--no-banner"] = [&](int i, const std::vector<std::string>& args) {
         assistant.config.no_banner = true;

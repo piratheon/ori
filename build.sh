@@ -22,7 +22,8 @@ get_version() {
 }
 
 VERSION=$(get_version)
-export ORI_VERSION="$VERSION"
+# The resolved version is handed to CMake explicitly via -DORI_VERSION below;
+# CMakeLists.txt gives that flag priority over the environment and .version.
 
 # Handle arguments
 CLEAN_BUILD=false

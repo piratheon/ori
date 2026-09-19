@@ -76,7 +76,8 @@
 
 - Default config: `~/.config/ori/config.json`
 - API key file: `~/.config/ori/key` (or set `OPENROUTER_API_KEY` env var)
-- Common config keys: `port`, `model`, `no_banner`, `no_clear`
+- Common config keys: `port`, `model`, `no_banner`, `no_clear`, `rag_memory_enabled`, `skills_memory_enabled`, `show_command_output`, `git_backup_enabled`
+  (keys added in newer versions are filled in with their defaults automatically the first time Ori starts)
 
 Examples:
 - Set a config value:
@@ -100,6 +101,24 @@ Useful flags:
 - `/autoexec [ask|yes|no]` — set auto-execute mode for commands: `ask` (prompt before executing), `yes` (automatically confirm and run), or `no` (never auto-execute). This value is saved to the persistent config.
 - `/model <api_config_id>` — switch the active API/provider by its configuration id (as defined in your `keys.json`). If the id is not found the CLI will list available models.
 - `/thinking` — activate the provider configured with the `role` set to `thinking` (if any). If no such provider is configured, a message will notify you.
+- `/init` — initialize the current directory as an Ori project (see [Git snapshots and `/undo`](#git-snapshots-and-undo)).
+- `/undo` — restore the files Ori changed in its last response and drop that exchange from the conversation.
+- `/gitbackup [on|off]` — switch pre-edit snapshots on or off (they only run in initialized projects).
+- `/cmdoutput [on|off]` — show or hide the output of commands Ori runs (default: on).
+- `/rag`, `/skills`, `/agents`, `/task` — RAG memory (capped at 500 chunks, oldest evicted first), skills, AGENTS.md rules and the task dispatcher.
+
+#### Git snapshots and `/undo`
+Ori can snapshot your working tree before it edits files so `/undo` can put things back. This is opt-in per project:
+
+```
+cd ~/projects/my-app
+ori --init        # or type /init inside Ori
+```
+
+- Ori never runs `git init` on its own. `/init` (or `ori --init`) asks before creating a repository (`-y` skips the question) and refuses to initialize your home directory or `/`.
+- In a directory that was not initialized, no snapshot is taken and `/undo` only removes the exchange from the conversation history.
+- Snapshots live on a private ref (`refs/ori/backups/...`) inside the repository. They do not add commits to your branch, touch your index, or change your git config.
+- `/undo` restores only the files Ori created, edited or renamed in its last response. Your other uncommitted work is left alone. The effects of shell commands Ori ran are not reverted.
 
 ### Non-interactive
 Run a one-off prompt:
@@ -143,6 +162,14 @@ Build & iterate locally
 Contributions, issues, and PRs welcome. Open an issue to discuss larger changes before submitting PRs. Follow standard fork → branch → PR workflow.
 
 ## Changelog (1.x.x)
+- 1.1.6 — Safety and correctness release.
+  - **Git safety:** Ori no longer runs `git init` and stages everything in whatever directory it was launched from (which could be your home directory). Snapshots are only taken in projects initialized with the new `/init` command or `--init` flag (never in `~` or `/`), they are stored on a private ref instead of a commit on your branch, and `/undo` restores only the files Ori changed instead of running `git reset --hard`, so unrelated uncommitted work is no longer lost.
+  - `pkexec` is only substituted for `sudo` when a graphical session is detected (`DISPLAY` or `WAYLAND_DISPLAY`); on a headless TTY or plain SSH session `sudo` is kept.
+  - `-DORI_VERSION=...` is honoured by CMake, and `.version` now reads `1.1.6` so local builds report the right version.
+  - New config keys (`rag_memory_enabled`, `skills_memory_enabled`, `show_command_output`, `git_backup_enabled`) are written into existing `config.json` files on startup.
+  - Long sessions no longer re-send AGENTS.md/skills/RAG context on every earlier turn: the context is attached to the current request only, so token usage grows linearly instead of quadratically.
+  - RAG memory is capped at 500 chunks (oldest evicted first) and tokenizes each chunk once instead of on every query.
+  - **Behaviour change:** command output is no longer printed unconditionally. It is controlled by `show_command_output` (default `true`, toggle with `/cmdoutput on|off`). With the default, output is still shown but is now wrapped in `[ COMMAND OUTPUT ]` / `[ END COMMAND OUTPUT ]` banner lines instead of being printed bare, and when the option is off Ori prints a one-line hint on stdout instead. Scripts that parse Ori's stdout should be checked against this.
 - 1.1.5 — Multi-API support (OpenRouter, Google, Hugging Face), centralized API key management (`keys.json`), first-use experience, new interactive commands (`/autoexec`, `/model`, `/thinking`), conditional debugging, and bug fixes.
 - 1.1.4 — Remove old plugin manager and files; refactor config, GUI, edits, backup/restore, and streamline main/CMakelists.
 - 1.1.3 — Fix Ctrl+C doesn't work on WebUI mode, and add a new debug option, also improve scripts to detect current distro and install deps for it.

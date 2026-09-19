@@ -16,6 +16,11 @@ private:
     std::string keys_json_example_path;
     bool debug_enabled;
 
+    // Backfills config keys introduced after the user's config.json was written
+    // (rag_memory_enabled, skills_memory_enabled, show_command_output,
+    // git_backup_enabled). Idempotent; never overwrites existing values.
+    void migrateConfigDefaults();
+
     bool needsMigration();
     void performMigration();
     bool isExampleModified();

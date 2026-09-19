@@ -34,7 +34,76 @@ MigrationManager::MigrationManager(const std::string& config_dir, bool debug_ena
       keys_json_example_path(config_dir + "/keys.json.example"),
       debug_enabled(debug_enabled) {}
 
+void MigrationManager::migrateConfigDefaults() {
+    if (!fs::exists(config_file_path)) {
+        return; // Nothing to migrate; ConfigManager writes a full config on first load.
+    }
+
+    Json::Value root;
+    {
+        std::ifstream in(config_file_path);
+        if (!in.is_open()) {
+            return;
+        }
+        Json::CharReaderBuilder builder;
+        std::string errs;
+        if (!Json::parseFromStream(builder, in, &root, &errs) || !root.isObject()) {
+            // Never rewrite a config we could not parse: the user may want to fix it by hand.
+            if (debug_enabled) std::cerr << "Debug: config.json is not a valid JSON object, skipping config migration." << std::endl;
+            return;
+        }
+    }
+
+    // Keys added in 1.1.6 together with their defaults (must match Config::Config()).
+    struct NewKey { const char* name; bool value; };
+    static const NewKey new_keys[] = {
+        {"rag_memory_enabled", false},
+        {"skills_memory_enabled", true},
+        {"show_command_output", true},
+        {"git_backup_enabled", true},
+    };
+
+    bool changed = false;
+    for (const auto& key : new_keys) {
+        if (!root.isMember(key.name)) {
+            root[key.name] = key.value;
+            changed = true;
+            if (debug_enabled) std::cerr << "Debug: config migration added '" << key.name << "'." << std::endl;
+        }
+    }
+
+    if (!changed) {
+        return;
+    }
+
+    // Write to a temp file and rename so a crash can never leave a truncated config.json.
+    const std::string tmp_path = config_file_path + ".tmp";
+    {
+        std::ofstream out(tmp_path, std::ios::trunc);
+        if (!out.is_open()) {
+            return;
+        }
+        Json::StreamWriterBuilder writer;
+        out << Json::writeString(writer, root);
+        out.flush();
+        if (!out.good()) {
+            out.close();
+            std::error_code ec;
+            fs::remove(tmp_path, ec);
+            return;
+        }
+    }
+    std::error_code ec;
+    fs::rename(tmp_path, config_file_path, ec);
+    if (ec) {
+        fs::remove(tmp_path, ec);
+    }
+}
+
 void MigrationManager::run() {
+    // Always runs, even for users who already have keys.json.
+    migrateConfigDefaults();
+
     if (fs::exists(keys_json_path)) {
         return; // Already has keys.json, nothing to do.
     }

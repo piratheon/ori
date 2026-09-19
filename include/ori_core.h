@@ -84,10 +84,22 @@ struct ProviderInfo {
     Json::Value details; // Stores the full JSON entry from keys.json
 };
 
+// A file that Ori created, modified or renamed while handling one response.
+// /undo restores exactly these paths and nothing else.
+struct UndoPath {
+    std::string abs_path;        // canonical absolute path
+    std::string rel_path;        // path relative to the repository root (valid when in_repo)
+    bool existed_before = false; // false => Ori created it, so /undo removes it
+    bool in_repo = true;         // false => outside the repository, cannot be restored via git
+};
+
 struct UndoSnapshot {
     size_t history_size = 0;
     std::string git_commit_hash;
     bool has_git_commit = false;
+    std::string backup_ref;      // private ref (refs/ori/backups/...) keeping the snapshot alive
+    std::string repo_root;       // repository the snapshot was taken in
+    std::vector<UndoPath> paths; // paths touched by Ori since the snapshot
 };
 
 class OriAssistant {
@@ -105,6 +117,17 @@ private:
     APIProvider* active_provider = nullptr;
     std::vector<ChatMessage> conversation_history;
     std::vector<UndoSnapshot> undo_snapshots;
+
+    // Git backup bookkeeping
+    std::string backup_session_id;
+    unsigned backup_counter = 0;
+    bool backup_refs_pruned = false;
+    bool git_hint_shown = false;
+    void beginUndoSnapshot();
+    UndoPath makeUndoPath(const std::string& path) const;
+    void addUndoPath(const UndoPath& p);
+    void deleteBackupRef(const std::string& repo_root, const std::string& ref);
+    void pruneStaleBackupRefs(const std::string& repo_root);
 
 
 public:
@@ -132,7 +155,15 @@ public:
     void checkForUpdates(bool silent);
     void setSystemPrompt(const std::string& prompt);
     std::string sendQuery(const std::string& prompt);
-    bool gitBackupCommit(std::string& out_commit_hash);
+    // Snapshots the working tree onto a private ref, without touching the user's
+    // branch, index or git config. Returns false (and leaves out_commit_hash empty)
+    // unless git backups are enabled AND the current directory is inside a git work
+    // tree that was explicitly initialized with /init (or `ori --init`).
+    bool gitBackupCommit(std::string& out_commit_hash, std::string* out_ref = nullptr, std::string* out_root = nullptr);
+    // Initializes the current directory as an Ori project (creating a git repo only
+    // after confirmation). Returns true on success or if already initialized.
+    bool initProject(bool auto_confirm = false);
+    bool isProjectInitialized() const;
     bool performUndo();
 };
 

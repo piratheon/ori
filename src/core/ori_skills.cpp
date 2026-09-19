@@ -130,6 +130,33 @@ RAGMemory::RAGMemory() {
     storage_path = getHomeConfigDir() + "/rag_memory.json";
 }
 
+void RAGMemory::indexChunk(RAGChunk& chunk) {
+    std::vector<std::string> tokens = tokenize(chunk.content);
+    chunk.token_count = tokens.size();
+    chunk.token_set.clear();
+    chunk.token_set.insert(tokens.begin(), tokens.end());
+}
+
+void RAGMemory::enforceCap() {
+    if (max_chunks == 0) {
+        chunks.clear();
+        return;
+    }
+    if (chunks.size() > max_chunks) {
+        // Chunks are stored oldest-first, so FIFO eviction drops from the front.
+        chunks.erase(chunks.begin(), chunks.begin() + (chunks.size() - max_chunks));
+    }
+}
+
+void RAGMemory::setMaxChunks(size_t n) {
+    max_chunks = n;
+    size_t before = chunks.size();
+    enforceCap();
+    if (chunks.size() != before) {
+        save();
+    }
+}
+
 void RAGMemory::load() {
     chunks.clear();
     if (!fs::exists(storage_path)) return;
@@ -149,9 +176,18 @@ void RAGMemory::load() {
             chunk.source = item.get("source", "general").asString();
             chunk.timestamp = item.get("timestamp", 0).asUInt64();
             if (!chunk.content.empty()) {
-                chunks.push_back(chunk);
+                indexChunk(chunk);
+                chunks.push_back(std::move(chunk));
             }
         }
+    }
+
+    // Files written by older versions may already exceed the cap: trim them once on load.
+    size_t before = chunks.size();
+    enforceCap();
+    next_seq = chunks.size() + 1;
+    if (chunks.size() != before) {
+        save();
     }
 }
 
@@ -180,53 +216,60 @@ void RAGMemory::addChunk(const std::string& content, const std::string& source) 
         std::chrono::system_clock::now().time_since_epoch()).count();
 
     RAGChunk chunk;
-    chunk.id = "chunk_" + std::to_string(now) + "_" + std::to_string(chunks.size() + 1);
+    chunk.id = "chunk_" + std::to_string(now) + "_" + std::to_string(next_seq++);
     chunk.content = content;
     chunk.source = source;
     chunk.timestamp = now;
+    indexChunk(chunk); // tokenize once, here, instead of on every retrieval
 
-    chunks.push_back(chunk);
+    chunks.push_back(std::move(chunk));
+    enforceCap();
     save();
 }
 
 void RAGMemory::clear() {
     chunks.clear();
+    next_seq = 1;
     save();
 }
 
 std::vector<RAGChunk> RAGMemory::retrieveRelevant(const std::string& query, size_t max_results) {
-    if (!enabled || chunks.empty()) return {};
+    if (!enabled || chunks.empty() || max_results == 0) return {};
 
     std::vector<std::string> query_tokens = tokenize(query);
     if (query_tokens.empty()) return {};
 
-    std::vector<std::pair<double, RAGChunk>> scored_chunks;
+    // Score by index so we never copy chunks (and their token sets) just to rank them.
+    std::vector<std::pair<double, size_t>> scored;
 
-    for (const auto& chunk : chunks) {
-        std::vector<std::string> chunk_tokens = tokenize(chunk.content);
-        if (chunk_tokens.empty()) continue;
+    for (size_t i = 0; i < chunks.size(); ++i) {
+        const RAGChunk& chunk = chunks[i];
+        if (chunk.token_count == 0) continue;
 
-        std::set<std::string> chunk_token_set(chunk_tokens.begin(), chunk_tokens.end());
         double matches = 0.0;
         for (const auto& qt : query_tokens) {
-            if (chunk_token_set.count(qt)) {
+            if (chunk.token_set.count(qt)) {
                 matches += 1.0;
             }
         }
 
         if (matches > 0) {
-            double score = matches / (std::log(chunk_tokens.size() + 1.0) + 1.0);
-            scored_chunks.push_back({score, chunk});
+            double score = matches / (std::log(chunk.token_count + 1.0) + 1.0);
+            scored.push_back({score, i});
         }
     }
 
-    std::sort(scored_chunks.begin(), scored_chunks.end(), [](const auto& a, const auto& b) {
-        return a.first > b.first;
+    // Highest score first; on ties prefer the more recent chunk (higher index).
+    size_t take = std::min(max_results, scored.size());
+    std::partial_sort(scored.begin(), scored.begin() + take, scored.end(), [](const auto& a, const auto& b) {
+        if (a.first != b.first) return a.first > b.first;
+        return a.second > b.second;
     });
 
     std::vector<RAGChunk> results;
-    for (size_t i = 0; i < std::min(max_results, scored_chunks.size()); ++i) {
-        results.push_back(scored_chunks[i].second);
+    results.reserve(take);
+    for (size_t i = 0; i < take; ++i) {
+        results.push_back(chunks[scored[i].second]);
     }
     return results;
 }
@@ -253,8 +296,8 @@ SkillsManager::SkillsManager() {}
 void SkillsManager::registerBuiltinSkills() {
     AgentSkill git_skill;
     git_skill.name = "git-integration";
-    git_skill.description = "Full git integration with automatic pre-edit backup commits and /undo support";
-    git_skill.instructions = "Ori features full git integration. Before any code modification ([edit] or [writefile]), Ori creates an automatic git backup commit ('ori-backup: pre-edit snapshot'). Users can run /undo at any time to revert the codebase to the prior git snapshot and clear the prompt/response from conversation history.";
+    git_skill.description = "Optional pre-edit git snapshots and /undo, only in projects initialized with /init";
+    git_skill.instructions = "In a project the user initialized with /init, Ori snapshots the tree before [edit]/[writefile] changes (on a private git ref, never touching their branch or index). /undo restores only the files Ori changed in the last response and drops that exchange from history. Elsewhere there is no snapshot; Ori never runs git init itself.";
     git_skill.is_builtin = true;
     git_skill.source_file = "built-in";
     skills.push_back(git_skill);

@@ -17,6 +17,10 @@
 #include <csignal>
 #include <fcntl.h>
 #include <sys/wait.h>
+#include <cerrno>
+#include <cstdint>
+#include <algorithm>
+#include <utility>
 
 #ifndef ORI_VERSION
 #define ORI_VERSION "0.0"
@@ -56,8 +60,11 @@ void run_spinner(const std::string& message) {
 #include <cstdlib>
 
 bool isGuiEnvironment() {
+    // X11 (or XWayland) sets DISPLAY; pure Wayland sessions only set WAYLAND_DISPLAY.
     const char* display = std::getenv("DISPLAY");
-    return display != nullptr && display[0] != '\0';
+    if (display != nullptr && display[0] != '\0') return true;
+    const char* wayland = std::getenv("WAYLAND_DISPLAY");
+    return wayland != nullptr && wayland[0] != '\0';
 }
 
 bool has_pkexec() {
@@ -69,7 +76,10 @@ bool has_pkexec() {
 }
 
 std::string prepare_elevated_command(const std::string& cmd) {
-    if (!has_pkexec()) {
+    // pkexec needs a polkit authentication agent, which only exists in a graphical
+    // session. On a headless TTY or over SSH it is installed but unusable, so keep
+    // sudo there.
+    if (!has_pkexec() || !isGuiEnvironment()) {
         return cmd;
     }
     std::string result = cmd;
@@ -86,6 +96,165 @@ std::string prepare_elevated_command(const std::string& cmd) {
     }
     return result;
 }
+
+
+// ---------------------------------------------------------------------------
+// Git helpers used by the backup / undo machinery.
+//
+// Everything here is spawned with an argv vector (fork + execvp), never through
+// a shell, so file names supplied by the model can not be interpreted as shell
+// syntax or git options.
+// ---------------------------------------------------------------------------
+namespace fs = std::filesystem;
+
+namespace {
+
+struct ProcResult {
+    bool started = false;
+    int exit_code = -1;
+    std::string out;
+    bool ok() const { return started && exit_code == 0; }
+};
+
+std::string trimEnd(std::string s) {
+    while (!s.empty() && (s.back() == '\n' || s.back() == '\r' || s.back() == ' ' || s.back() == '\t')) {
+        s.pop_back();
+    }
+    return s;
+}
+
+using EnvList = std::vector<std::pair<std::string, std::string>>;
+
+ProcResult runProcess(const std::vector<std::string>& argv, const EnvList& env = {}) {
+    ProcResult result;
+    if (argv.empty()) return result;
+
+    int pipe_fd[2];
+    if (pipe(pipe_fd) == -1) return result;
+
+    pid_t pid = fork();
+    if (pid == -1) {
+        close(pipe_fd[0]);
+        close(pipe_fd[1]);
+        return result;
+    }
+
+    if (pid == 0) { // child
+        close(pipe_fd[0]);
+        dup2(pipe_fd[1], STDOUT_FILENO);
+        close(pipe_fd[1]);
+        int devnull = open("/dev/null", O_RDWR);
+        if (devnull >= 0) {
+            dup2(devnull, STDIN_FILENO);
+            dup2(devnull, STDERR_FILENO);
+            if (devnull > STDERR_FILENO) close(devnull);
+        }
+        for (const auto& kv : env) {
+            setenv(kv.first.c_str(), kv.second.c_str(), 1);
+        }
+        std::vector<char*> args;
+        args.reserve(argv.size() + 1);
+        for (const auto& a : argv) args.push_back(const_cast<char*>(a.c_str()));
+        args.push_back(nullptr);
+        execvp(args[0], args.data());
+        _exit(127);
+    }
+
+    close(pipe_fd[1]);
+    char buf[4096];
+    while (true) {
+        ssize_t n = read(pipe_fd[0], buf, sizeof(buf));
+        if (n > 0) {
+            result.out.append(buf, static_cast<size_t>(n));
+        } else if (n < 0 && errno == EINTR) {
+            continue;
+        } else {
+            break;
+        }
+    }
+    close(pipe_fd[0]);
+
+    int status = 0;
+    while (waitpid(pid, &status, 0) == -1 && errno == EINTR) {}
+    result.started = true;
+    result.exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+    return result;
+}
+
+// Runs `git [-C repo_root] <args...>`. Pathspecs are always taken literally so a
+// file called "*.txt" is never expanded into a glob.
+ProcResult runGit(const std::string& repo_root, const std::vector<std::string>& args, EnvList env = {}) {
+    std::vector<std::string> argv = {"git"};
+    if (!repo_root.empty()) {
+        argv.push_back("-C");
+        argv.push_back(repo_root);
+    }
+    argv.insert(argv.end(), args.begin(), args.end());
+    env.push_back({"GIT_LITERAL_PATHSPECS", "1"});
+    env.push_back({"GIT_TERMINAL_PROMPT", "0"});
+    return runProcess(argv, env);
+}
+
+bool gitAvailable() {
+    static int cached = -1;
+    if (cached == -1) {
+        cached = runProcess({"git", "--version"}).ok() ? 1 : 0;
+    }
+    return cached == 1;
+}
+
+// A repository rooted at "/" or at the user's home directory is never a project
+// Ori may snapshot or initialize: staging it would sweep up personal files.
+bool isUnsafeRoot(const std::string& dir) {
+    std::error_code ec;
+    if (dir.empty()) return true;
+    if (fs::equivalent(dir, "/", ec) && !ec) return true;
+    const char* home = std::getenv("HOME");
+    if (home != nullptr && home[0] != '\0') {
+        ec.clear();
+        if (fs::equivalent(dir, home, ec) && !ec) return true;
+    }
+    return false;
+}
+
+struct RepoInfo {
+    std::string root;    // work tree top level
+    std::string git_dir; // absolute git dir
+};
+
+// Locates the git work tree containing the current directory.
+bool locateRepo(RepoInfo& info) {
+    if (!gitAvailable()) return false;
+    ProcResult inside = runGit("", {"rev-parse", "--is-inside-work-tree"});
+    if (!inside.ok() || trimEnd(inside.out) != "true") return false;
+    ProcResult top = runGit("", {"rev-parse", "--show-toplevel"});
+    if (!top.ok()) return false;
+    info.root = trimEnd(top.out);
+    if (info.root.empty()) return false;
+    ProcResult gd = runGit(info.root, {"rev-parse", "--absolute-git-dir"});
+    if (!gd.ok()) return false;
+    info.git_dir = trimEnd(gd.out);
+    return !info.git_dir.empty();
+}
+
+// Marker file created by /init. It lives inside the git dir so it never shows up
+// in the working tree, is never committed, and is local to this clone.
+fs::path projectMarkerPath(const RepoInfo& info) {
+    return fs::path(info.git_dir) / "ori" / "project.json";
+}
+
+enum class BackupBlock { None, NoGit, NotRepo, UnsafeRoot, NotInitialized };
+
+BackupBlock probeBackup(RepoInfo& info) {
+    if (!gitAvailable()) return BackupBlock::NoGit;
+    if (!locateRepo(info)) return BackupBlock::NotRepo;
+    if (isUnsafeRoot(info.root)) return BackupBlock::UnsafeRoot;
+    std::error_code ec;
+    if (!fs::exists(projectMarkerPath(info), ec)) return BackupBlock::NotInitialized;
+    return BackupBlock::None;
+}
+
+} // namespace
 
 // ANSI Color Codes
 const std::string RESET = "\033[0m";
@@ -327,7 +496,7 @@ std::string OriAssistant::readInput() {
             std::vector<std::string> slash_commands = {
                 "/help", "/quit", "/exit", "/clear", "/cat", "/exec",
                 "/autoexec", "/model", "/thinking", "/agents", "/task", "/subagent",
-                "/undo", "/cmdoutput", "/gitbackup", "/skills", "/skill", "/rag"
+                "/undo", "/init", "/cmdoutput", "/gitbackup", "/skills", "/skill", "/rag"
             };
             if (buffer.rfind("/task", 0) == 0) {
                 slash_commands = {"/task list", "/task clear", "/task run", "/task next", "/task create ", "/task decompose "};
@@ -420,37 +589,271 @@ void OriAssistant::setSystemPrompt(const std::string& prompt) {
     conversation_history.push_back({"system", prompt});
 }
 
-bool OriAssistant::gitBackupCommit(std::string& out_commit_hash) {
+bool OriAssistant::gitBackupCommit(std::string& out_commit_hash, std::string* out_ref, std::string* out_root) {
     out_commit_hash.clear();
+    if (out_ref) out_ref->clear();
+    if (out_root) out_root->clear();
     if (!config.git_backup_enabled) {
         return false;
     }
-    if (std::system("which git > /dev/null 2>&1") != 0) {
+
+    // Never `git init` here: snapshots are only taken in a repository the user has
+    // explicitly initialized with /init, and never for "/" or the home directory.
+    RepoInfo repo;
+    BackupBlock block = probeBackup(repo);
+    if (block != BackupBlock::None) {
+        if (!git_hint_shown) {
+            if (block == BackupBlock::NotRepo || block == BackupBlock::NotInitialized) {
+                git_hint_shown = true;
+                std::cerr << YELLOW << "[i] Pre-edit git snapshots are off here (not an initialized Ori project). "
+                          << "Run /init (or `ori --init`) to enable /undo for file changes." << RESET << std::endl;
+            } else if (block == BackupBlock::UnsafeRoot) {
+                git_hint_shown = true;
+                std::cerr << YELLOW << "[!] Refusing to snapshot a repository rooted at your home directory or '/'."
+                          << RESET << std::endl;
+            }
+        }
         return false;
     }
 
-    if (std::system("git rev-parse --is-inside-work-tree > /dev/null 2>&1") != 0) {
-        std::system("git init > /dev/null 2>&1");
-        std::system("git config user.name 'Ori Assistant' > /dev/null 2>&1");
-        std::system("git config user.email 'ori@local' > /dev/null 2>&1");
+    if (backup_session_id.empty()) {
+        backup_session_id = std::to_string(static_cast<long long>(getpid())) + "-" +
+            std::to_string(static_cast<long long>(std::chrono::duration_cast<std::chrono::seconds>(
+                std::chrono::system_clock::now().time_since_epoch()).count()));
+    }
+    if (!backup_refs_pruned) {
+        backup_refs_pruned = true;
+        pruneStaleBackupRefs(repo.root);
     }
 
-    std::system("git add -A > /dev/null 2>&1");
-    std::system("git commit --allow-empty -m \"ori-backup: pre-edit snapshot\" > /dev/null 2>&1");
+    // Build the snapshot in a throw-away index so the user's real index, HEAD,
+    // branch and git config are never modified.
+    std::error_code ec;
+    fs::create_directories(fs::path(repo.git_dir) / "ori", ec);
+    const std::string tmp_index = (fs::path(repo.git_dir) / "ori" /
+        ("index.tmp." + std::to_string(static_cast<long long>(getpid())))).string();
+    fs::remove(tmp_index, ec);
 
-    FILE* pipe = popen("git rev-parse HEAD 2>/dev/null", "r");
-    if (pipe) {
-        char buffer[128];
-        if (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
-            std::string hash = buffer;
-            while (!hash.empty() && (hash.back() == '\n' || hash.back() == '\r')) {
-                hash.pop_back();
-            }
-            out_commit_hash = hash;
+    EnvList env = {
+        {"GIT_INDEX_FILE", tmp_index},
+        {"GIT_AUTHOR_NAME", "Ori Assistant"},
+        {"GIT_AUTHOR_EMAIL", "ori@local"},
+        {"GIT_COMMITTER_NAME", "Ori Assistant"},
+        {"GIT_COMMITTER_EMAIL", "ori@local"},
+    };
+
+    auto cleanup = [&]() { std::error_code e; fs::remove(tmp_index, e); };
+
+    ProcResult head = runGit(repo.root, {"rev-parse", "-q", "--verify", "HEAD^{commit}"});
+    std::string parent = head.ok() ? trimEnd(head.out) : std::string();
+
+    if (!parent.empty() && !runGit(repo.root, {"read-tree", parent}, env).ok()) {
+        cleanup();
+        return false;
+    }
+    if (!runGit(repo.root, {"add", "-A"}, env).ok()) {
+        cleanup();
+        return false;
+    }
+    ProcResult tree = runGit(repo.root, {"write-tree"}, env);
+    if (!tree.ok() || trimEnd(tree.out).empty()) {
+        cleanup();
+        return false;
+    }
+
+    std::vector<std::string> commit_args = {"commit-tree", trimEnd(tree.out)};
+    if (!parent.empty()) {
+        commit_args.push_back("-p");
+        commit_args.push_back(parent);
+    }
+    commit_args.push_back("-m");
+    commit_args.push_back("ori-backup: pre-edit snapshot");
+    ProcResult commit = runGit(repo.root, commit_args, env);
+    cleanup();
+    std::string hash = trimEnd(commit.out);
+    if (!commit.ok() || hash.empty()) {
+        return false;
+    }
+
+    const std::string ref = "refs/ori/backups/" + backup_session_id + "/" + std::to_string(++backup_counter);
+    if (!runGit(repo.root, {"update-ref", ref, hash}).ok()) {
+        return false;
+    }
+
+    out_commit_hash = hash;
+    if (out_ref) *out_ref = ref;
+    if (out_root) *out_root = repo.root;
+    return true;
+}
+
+void OriAssistant::deleteBackupRef(const std::string& repo_root, const std::string& ref) {
+    if (repo_root.empty() || ref.empty()) return;
+    runGit(repo_root, {"update-ref", "-d", ref});
+}
+
+// Snapshots older than a week belong to sessions that no longer exist (e.g. killed
+// terminals) and can never be undone again, so let git garbage-collect them.
+void OriAssistant::pruneStaleBackupRefs(const std::string& repo_root) {
+    ProcResult refs = runGit(repo_root, {"for-each-ref", "--format=%(refname) %(committerdate:unix)", "refs/ori/backups/"});
+    if (!refs.ok()) return;
+    const long long cutoff = static_cast<long long>(std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count()) - 7LL * 24 * 3600;
+    std::istringstream iss(refs.out);
+    std::string line;
+    while (std::getline(iss, line)) {
+        size_t sp = line.rfind(' ');
+        if (sp == std::string::npos) continue;
+        std::string name = line.substr(0, sp);
+        long long when = 0;
+        try { when = std::stoll(line.substr(sp + 1)); } catch (...) { continue; }
+        if (when < cutoff) {
+            runGit(repo_root, {"update-ref", "-d", name});
         }
-        pclose(pipe);
     }
-    return !out_commit_hash.empty();
+}
+
+bool OriAssistant::isProjectInitialized() const {
+    RepoInfo repo;
+    return probeBackup(repo) == BackupBlock::None;
+}
+
+bool OriAssistant::initProject(bool auto_confirm) {
+    if (!gitAvailable()) {
+        std::cout << RED << "[!] git was not found in PATH. Install git first, then run /init again." << RESET << std::endl;
+        return false;
+    }
+
+    std::error_code ec;
+    fs::path cwd = fs::current_path(ec);
+    if (ec) {
+        std::cout << RED << "[!] Could not determine the current directory." << RESET << std::endl;
+        return false;
+    }
+
+    RepoInfo repo;
+    if (locateRepo(repo)) {
+        if (isUnsafeRoot(repo.root)) {
+            std::cout << RED << "[!] Refusing to initialize: the git repository here is rooted at '" << repo.root
+                      << "' (your home directory or '/'). cd into a project directory and try again." << RESET << std::endl;
+            return false;
+        }
+    } else {
+        if (isUnsafeRoot(cwd.string())) {
+            std::cout << RED << "[!] Refusing to initialize your home directory or '/' as an Ori project. "
+                      << "cd into a project directory and try again." << RESET << std::endl;
+            return false;
+        }
+        bool go_ahead = auto_confirm;
+        if (!go_ahead) {
+            if (!isatty(STDIN_FILENO)) {
+                std::cout << RED << "[!] '" << cwd.string() << "' is not a git repository. Re-run with -y to create one non-interactively."
+                          << RESET << std::endl;
+                return false;
+            }
+            std::cout << YELLOW << "'" << cwd.string() << "' is not a git repository. Create one here? (y/n): " << RESET;
+            std::string answer;
+            std::getline(std::cin, answer);
+            if (std::cin.fail()) {
+                std::cin.clear();
+                answer = "n";
+            }
+            go_ahead = (answer == "y" || answer == "Y");
+        }
+        if (!go_ahead) {
+            std::cout << YELLOW << "Initialization cancelled." << RESET << std::endl;
+            return false;
+        }
+        if (!runGit(cwd.string(), {"init"}).ok()) {
+            std::cout << RED << "[!] `git init` failed in " << cwd.string() << RESET << std::endl;
+            return false;
+        }
+        if (!locateRepo(repo)) {
+            std::cout << RED << "[!] Could not locate the newly created repository." << RESET << std::endl;
+            return false;
+        }
+        std::cout << GREEN << "[✓] Created a new git repository in " << repo.root << RESET << std::endl;
+    }
+
+    fs::path marker = projectMarkerPath(repo);
+    if (fs::exists(marker, ec)) {
+        std::cout << GREEN << "[✓] " << repo.root << " is already an Ori project." << RESET << std::endl;
+    } else {
+        fs::create_directories(marker.parent_path(), ec);
+        Json::Value info;
+        info["ori_version"] = ORI_VERSION;
+        info["root"] = repo.root;
+        info["initialized_at"] = static_cast<Json::Int64>(std::chrono::duration_cast<std::chrono::seconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count());
+        std::ofstream out(marker);
+        if (!out.is_open()) {
+            std::cout << RED << "[!] Could not write " << marker.string() << RESET << std::endl;
+            return false;
+        }
+        Json::StreamWriterBuilder writer;
+        out << Json::writeString(writer, info) << "\n";
+        out.close();
+        std::cout << GREEN << "[✓] Initialized Ori project at " << repo.root << RESET << std::endl;
+    }
+
+    if (config.git_backup_enabled) {
+        std::cout << "    Pre-edit git snapshots and /undo are active for this project." << std::endl;
+    } else {
+        std::cout << YELLOW << "    Git backups are currently switched off; run /gitbackup on to use them." << RESET << std::endl;
+    }
+    return true;
+}
+
+// Takes a snapshot for the response being handled, once per response. Skips it
+// (recording has_git_commit = false) unless the project was initialized with /init.
+void OriAssistant::beginUndoSnapshot() {
+    size_t hist_target = conversation_history.size() >= 2 ? conversation_history.size() - 2 : conversation_history.size();
+    if (!undo_snapshots.empty() && undo_snapshots.back().history_size == hist_target) {
+        return;
+    }
+    UndoSnapshot snap;
+    snap.history_size = hist_target;
+    snap.has_git_commit = gitBackupCommit(snap.git_commit_hash, &snap.backup_ref, &snap.repo_root);
+    undo_snapshots.push_back(snap);
+}
+
+// Describes a path Ori is about to modify. Must be called BEFORE the change so that
+// existed_before reflects the pre-edit state.
+UndoPath OriAssistant::makeUndoPath(const std::string& path) const {
+    UndoPath up;
+    std::error_code ec;
+    fs::path abs = fs::weakly_canonical(fs::absolute(path, ec), ec);
+    if (ec) {
+        up.abs_path = path;
+        up.in_repo = false;
+        return up;
+    }
+    up.abs_path = abs.string();
+    up.existed_before = fs::exists(abs, ec);
+
+    up.in_repo = false;
+    if (!undo_snapshots.empty() && !undo_snapshots.back().repo_root.empty()) {
+        fs::path root = fs::weakly_canonical(undo_snapshots.back().repo_root, ec);
+        if (!ec) {
+            fs::path rel = abs.lexically_relative(root);
+            if (!rel.empty() && *rel.begin() != "..") {
+                up.rel_path = rel.generic_string();
+                up.in_repo = true;
+            }
+        }
+    }
+    return up;
+}
+
+// Registers a path as changed by Ori. The first record for a path wins because it
+// holds the true pre-edit state.
+void OriAssistant::addUndoPath(const UndoPath& p) {
+    if (undo_snapshots.empty()) return;
+    UndoSnapshot& snap = undo_snapshots.back();
+    if (!snap.has_git_commit) return;
+    for (const auto& existing : snap.paths) {
+        if (existing.abs_path == p.abs_path) return;
+    }
+    snap.paths.push_back(p);
 }
 
 bool OriAssistant::performUndo() {
@@ -462,26 +865,62 @@ bool OriAssistant::performUndo() {
     UndoSnapshot snap = undo_snapshots.back();
     undo_snapshots.pop_back();
 
-    bool code_reverted = false;
+    int restored = 0, removed = 0, skipped = 0, failed = 0;
     if (snap.has_git_commit && !snap.git_commit_hash.empty()) {
-        std::string cmd = "git reset --hard HEAD~1 > /dev/null 2>&1";
-        if (std::system(cmd.c_str()) == 0) {
-            code_reverted = true;
-        } else {
-            cmd = "git reset --hard " + snap.git_commit_hash + "~1 > /dev/null 2>&1";
-            if (std::system(cmd.c_str()) == 0) {
-                code_reverted = true;
+        // Restore only the paths Ori touched, newest change first. Everything else in
+        // the work tree (the user's own uncommitted work) is left exactly as it is.
+        for (auto it = snap.paths.rbegin(); it != snap.paths.rend(); ++it) {
+            const UndoPath& p = *it;
+            if (!p.in_repo) { skipped++; continue; }
+
+            std::error_code ec;
+            if (!p.existed_before) {
+                // Ori created this file, so undoing means deleting it.
+                fs::file_status st = fs::symlink_status(p.abs_path, ec);
+                if (!ec && (fs::is_regular_file(st) || fs::is_symlink(st))) {
+                    if (fs::remove(p.abs_path, ec) && !ec) removed++; else failed++;
+                }
+                continue;
             }
+
+            const std::string spec = snap.git_commit_hash + ":" + p.rel_path;
+            if (!runGit(snap.repo_root, {"cat-file", "-e", spec}).ok()) {
+                // Not captured by the snapshot (e.g. a git-ignored file), so it cannot be restored.
+                skipped++;
+                continue;
+            }
+            ProcResult r = runGit(snap.repo_root, {"restore", "--source=" + snap.git_commit_hash, "--worktree", "--", p.rel_path});
+            if (!r.ok()) {
+                // git < 2.23 has no `restore`: fall back to checkout and un-stage the path again.
+                r = runGit(snap.repo_root, {"checkout", snap.git_commit_hash, "--", p.rel_path});
+                if (r.ok()) runGit(snap.repo_root, {"reset", "-q", "--", p.rel_path});
+            }
+            if (r.ok()) restored++; else failed++;
         }
+        deleteBackupRef(snap.repo_root, snap.backup_ref);
     }
 
     if (conversation_history.size() > snap.history_size) {
         conversation_history.resize(snap.history_size);
     }
 
-    std::cout << GREEN << "[✓] Undo performed successfully! "
-              << (code_reverted ? "Code restored to pre-edit git backup snapshot and " : "")
-              << "conversation prompt/response removed from history." << RESET << std::endl;
+    std::cout << GREEN << "[✓] Undo performed successfully! " << RESET;
+    if (snap.has_git_commit) {
+        std::cout << GREEN << "Restored " << restored << " file(s)";
+        if (removed > 0) std::cout << ", removed " << removed << " created file(s)";
+        std::cout << " changed by Ori; your other uncommitted work was left untouched. " << RESET;
+        if (skipped > 0 || failed > 0) {
+            std::cout << YELLOW << "\n[!] " << skipped << " path(s) could not be restored automatically (outside the repository, git-ignored or not in the snapshot)"
+                      << (failed > 0 ? " and " + std::to_string(failed) + " failed" : std::string()) << "." << RESET << "\n";
+        }
+    }
+    std::cout << GREEN << "The conversation prompt/response was removed from history." << RESET << std::endl;
+    if (!snap.has_git_commit) {
+        std::cout << YELLOW << "[i] No git snapshot exists for that action, so files were not reverted. "
+                  << "Run /init in a project directory to enable file restore." << RESET << std::endl;
+    } else {
+        std::cout << YELLOW << "[i] Effects of shell commands are not reverted." << RESET << std::endl;
+    }
     return true;
 }
 
@@ -490,41 +929,43 @@ std::string OriAssistant::sendQuery(const std::string& prompt) {
         return colorize(RED, "Error: No active API provider is configured.");
     }
 
-    std::string agents_ctx = agentsManager.getAgentsPromptContext();
-    std::string skills_ctx = skillsManager.getSkillsPromptContext();
-    std::string rag_ctx = ragMemory.getPromptContext(prompt);
+    // Per-request context (AGENTS.md rules, skills, retrieved RAG chunks). It is
+    // attached to the outgoing request only. Persisting it in conversation_history
+    // would re-send every earlier copy on every later turn, so token usage would
+    // grow quadratically over a long session.
+    std::string prefix_ctx = agentsManager.getAgentsPromptContext();
+    prefix_ctx += skillsManager.getSkillsPromptContext();
+    prefix_ctx += ragMemory.getPromptContext(prompt);
 
-    std::string full_prompt = prompt;
-    std::string prefix_ctx = "";
-    if (!agents_ctx.empty() && conversation_history.size() <= 1) prefix_ctx += agents_ctx;
-    if (!skills_ctx.empty()) prefix_ctx += skills_ctx;
-    if (!rag_ctx.empty()) prefix_ctx += rag_ctx;
-
+    std::string outgoing_prompt = prompt;
     if (!prefix_ctx.empty()) {
-        full_prompt = prefix_ctx + "\n" + prompt;
+        outgoing_prompt = prefix_ctx + "\n" + prompt;
     }
 
     if (config.debug) {
         std::cerr << "[DEBUG] Active API Config / Model: " << config.active_api_config << "\n";
-        std::cerr << "[DEBUG] Prompt: " << full_prompt << "\n";
-    }
-    
-    conversation_history.push_back({"user", full_prompt});
-    
-    // Create a temporary copy of the conversation history for the provider
-    std::vector<std::pair<std::string, std::string>> provider_history;
-    for(const auto& msg : conversation_history) {
-        provider_history.push_back({msg.role, msg.content});
+        std::cerr << "[DEBUG] Prompt: " << outgoing_prompt << "\n";
     }
 
+    // The history keeps the bare prompt only.
+    conversation_history.push_back({"user", prompt});
+
+    // Build the request from the history, swapping in the context-enriched prompt for this turn.
+    std::vector<std::pair<std::string, std::string>> provider_history;
+    provider_history.reserve(conversation_history.size());
+    for (const auto& msg : conversation_history) {
+        provider_history.push_back({msg.role, msg.content});
+    }
+    provider_history.back().second = outgoing_prompt;
+
     std::string response = active_provider->sendQuery(prompt, provider_history);
-    
+
     conversation_history.push_back({"assistant", response});
 
     if (config.rag_memory_enabled) {
         ragMemory.addChunk("User: " + prompt + "\nAssistant: " + response, "conversation");
     }
-    
+
     return response;
 }
 
@@ -542,7 +983,12 @@ OriAssistant::OriAssistant() {
 }
 
 OriAssistant::~OriAssistant() {
-    // Destructor
+    // Snapshots can not be undone after the session ends, so release their refs.
+    for (const auto& snap : undo_snapshots) {
+        if (snap.has_git_commit) {
+            deleteBackupRef(snap.repo_root, snap.backup_ref);
+        }
+    }
 #ifdef CURL_FOUND
     curl_global_cleanup();
 #endif
@@ -786,6 +1232,8 @@ void OriAssistant::run() {
                 std::cout << BOLD << "----------------------------" << RESET << std::endl;
             } else if (input == "/undo") {
                 performUndo();
+            } else if (input == "/init") {
+                initProject(false);
             } else if (input.rfind("/gitbackup", 0) == 0) {
                 std::string arg = input.length() > 10 ? input.substr(11) : "";
                 if (arg == "on" || arg == "true" || arg == "yes") {
@@ -800,6 +1248,9 @@ void OriAssistant::run() {
                     config.git_backup_enabled = !config.git_backup_enabled;
                     configManager.saveConfig(config);
                     std::cout << GREEN << "[✓] Pre-edit git backup commits set to: " << (config.git_backup_enabled ? "ON" : "OFF") << RESET << std::endl;
+                }
+                if (config.git_backup_enabled && !isProjectInitialized()) {
+                    std::cout << YELLOW << "[i] Snapshots only run in projects initialized with /init; this directory is not one yet." << RESET << std::endl;
                 }
             } else if (input.rfind("/cmdoutput", 0) == 0) {
                 std::string arg = input.length() > 10 ? input.substr(11) : "";
@@ -911,7 +1362,7 @@ void OriAssistant::run() {
                     std::cout << GREEN << "[✓] RAG Memory cleared." << RESET << std::endl;
                 } else {
                     std::cout << BOLD << "RAG Memory Status: " << (config.rag_memory_enabled ? GREEN + "ENABLED" : YELLOW + "DISABLED") << RESET << "\n";
-                    std::cout << "Total Chunks Indexed: " << ragMemory.getChunks().size() << "\n\n";
+                    std::cout << "Total Chunks Indexed: " << ragMemory.getChunks().size() << " (max " << ragMemory.getMaxChunks() << ", oldest evicted first)\n\n";
                     std::cout << YELLOW << "RAG Memory Commands:" << RESET << std::endl;
                     std::cout << "  /rag on / off             - Toggle RAG Memory" << std::endl;
                     std::cout << "  /rag add <text>           - Add text chunk to RAG Memory" << std::endl;
@@ -1023,17 +1474,8 @@ void OriAssistant::handleResponse(const std::string& response, bool auto_confirm
             current_pos = exec_end + strlen("[/exec]");
             continue;
         } else if (next_tag == EDIT) {
-            // Ensure pre-edit git backup commit snapshot before modifying codebase
-            size_t hist_target = conversation_history.size() >= 2 ? conversation_history.size() - 2 : conversation_history.size();
-            if (undo_snapshots.empty() || undo_snapshots.back().history_size != hist_target) {
-                std::string commit_hash;
-                bool committed = gitBackupCommit(commit_hash);
-                UndoSnapshot snap;
-                snap.history_size = hist_target;
-                snap.git_commit_hash = commit_hash;
-                snap.has_git_commit = committed;
-                undo_snapshots.push_back(snap);
-            }
+            // Take the pre-edit snapshot (only inside an initialized Ori project)
+            beginUndoSnapshot();
 
             // Handle edit block using strict JSON parsing (JsonCpp)
             if (edit_end == std::string::npos) break; // malformed
@@ -1110,7 +1552,10 @@ void OriAssistant::handleResponse(const std::string& response, bool auto_confirm
                     if (op.newContent.empty()) {
                         std::cout << YELLOW << "[edit] no new content found in JSON payload for file " << filename << RESET << std::endl;
                     } else {
-                        OriEdit::applyChanges(op);
+                        UndoPath undo_path = makeUndoPath(filename); // capture pre-edit state
+                        if (OriEdit::applyChanges(op)) {
+                            addUndoPath(undo_path);
+                        }
                     }
                 }
             } else if (operation == "rename") {
@@ -1119,7 +1564,11 @@ void OriAssistant::handleResponse(const std::string& response, bool auto_confirm
                 if (filename.empty() || newname.empty()) {
                     std::cout << YELLOW << "[edit] rename requires 'file' and 'newname' fields" << RESET << std::endl;
                 } else {
+                    UndoPath undo_from = makeUndoPath(filename);
+                    UndoPath undo_to = makeUndoPath(newname);
                     if (std::rename(filename.c_str(), newname.c_str()) == 0) {
+                        addUndoPath(undo_from);
+                        addUndoPath(undo_to);
                         std::cout << GREEN << "Renamed " << filename << " -> " << newname << RESET << std::endl;
                     } else {
                         std::cout << RED << "Failed to rename " << filename << RESET << std::endl;
@@ -1132,17 +1581,8 @@ void OriAssistant::handleResponse(const std::string& response, bool auto_confirm
             current_pos = edit_end + strlen("[/edit]");
             continue;
         } else if (next_tag == WRITEFILE) {
-            // Ensure pre-edit git backup commit snapshot before modifying codebase
-            size_t hist_target = conversation_history.size() >= 2 ? conversation_history.size() - 2 : conversation_history.size();
-            if (undo_snapshots.empty() || undo_snapshots.back().history_size != hist_target) {
-                std::string commit_hash;
-                bool committed = gitBackupCommit(commit_hash);
-                UndoSnapshot snap;
-                snap.history_size = hist_target;
-                snap.git_commit_hash = commit_hash;
-                snap.has_git_commit = committed;
-                undo_snapshots.push_back(snap);
-            }
+            // Take the pre-edit snapshot (only inside an initialized Ori project)
+            beginUndoSnapshot();
 
             // Handle writefile block
             if (writefile_end == std::string::npos) break; // malformed
@@ -1160,8 +1600,10 @@ void OriAssistant::handleResponse(const std::string& response, bool auto_confirm
                 std::filesystem::create_directories(dir);
             }
 
+            UndoPath undo_path = makeUndoPath(filename); // capture pre-write state
             std::ofstream file(filename);
             if (file.is_open()) {
+                addUndoPath(undo_path);
                 file << content;
                 file.close();
                 std::cout << GREEN << "File created: " << filename << RESET << std::endl;
@@ -1443,8 +1885,9 @@ void OriAssistant::showHelp() {
     std::cout << "  /exec [cmd]    - Execute a shell command and add the output to the chat context\n";
     std::cout << "  /autoexec [m]  - Set auto-execution mode for commands (ask, yes, no)\n";
     std::cout << "  /cmdoutput [o] - Toggle command output display (on, off)\n";
-    std::cout << "  /gitbackup [o] - Toggle automatic pre-edit git backup commits (on, off)\n";
-    std::cout << "  /undo          - Revert last code changes (git backup) and remove prompt from history\n";
+    std::cout << "  /init          - Initialize this directory as an Ori project (enables git snapshots for /undo)\n";
+    std::cout << "  /gitbackup [o] - Toggle pre-edit git snapshots (on, off); only active in projects set up with /init\n";
+    std::cout << "  /undo          - Restore the files Ori changed in the last response and remove that prompt from history\n";
     std::cout << "  /model [id]    - Switch to a different API model configuration by ID\n";
     std::cout << "  /skills        - Manage agent skills (list, show, learn, forget)\n";
     std::cout << "  /rag           - Manage RAG memory (on, off, add, search, clear)\n";
