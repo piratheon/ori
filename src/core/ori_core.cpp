@@ -327,7 +327,7 @@ std::string OriAssistant::readInput() {
             std::vector<std::string> slash_commands = {
                 "/help", "/quit", "/exit", "/clear", "/cat", "/exec",
                 "/autoexec", "/model", "/thinking", "/agents", "/task", "/subagent",
-                "/undo", "/cmdoutput", "/skills", "/skill", "/rag"
+                "/undo", "/cmdoutput", "/gitbackup", "/skills", "/skill", "/rag"
             };
             if (buffer.rfind("/task", 0) == 0) {
                 slash_commands = {"/task list", "/task clear", "/task run", "/task next", "/task create ", "/task decompose "};
@@ -422,6 +422,9 @@ void OriAssistant::setSystemPrompt(const std::string& prompt) {
 
 bool OriAssistant::gitBackupCommit(std::string& out_commit_hash) {
     out_commit_hash.clear();
+    if (!config.git_backup_enabled) {
+        return false;
+    }
     if (std::system("which git > /dev/null 2>&1") != 0) {
         return false;
     }
@@ -783,6 +786,21 @@ void OriAssistant::run() {
                 std::cout << BOLD << "----------------------------" << RESET << std::endl;
             } else if (input == "/undo") {
                 performUndo();
+            } else if (input.rfind("/gitbackup", 0) == 0) {
+                std::string arg = input.length() > 10 ? input.substr(11) : "";
+                if (arg == "on" || arg == "true" || arg == "yes") {
+                    config.git_backup_enabled = true;
+                    configManager.saveConfig(config);
+                    std::cout << GREEN << "[✓] Pre-edit git backup commits enabled." << RESET << std::endl;
+                } else if (arg == "off" || arg == "false" || arg == "no") {
+                    config.git_backup_enabled = false;
+                    configManager.saveConfig(config);
+                    std::cout << GREEN << "[✓] Pre-edit git backup commits disabled." << RESET << std::endl;
+                } else {
+                    config.git_backup_enabled = !config.git_backup_enabled;
+                    configManager.saveConfig(config);
+                    std::cout << GREEN << "[✓] Pre-edit git backup commits set to: " << (config.git_backup_enabled ? "ON" : "OFF") << RESET << std::endl;
+                }
             } else if (input.rfind("/cmdoutput", 0) == 0) {
                 std::string arg = input.length() > 10 ? input.substr(11) : "";
                 if (arg == "on" || arg == "true" || arg == "yes") {
@@ -1425,6 +1443,7 @@ void OriAssistant::showHelp() {
     std::cout << "  /exec [cmd]    - Execute a shell command and add the output to the chat context\n";
     std::cout << "  /autoexec [m]  - Set auto-execution mode for commands (ask, yes, no)\n";
     std::cout << "  /cmdoutput [o] - Toggle command output display (on, off)\n";
+    std::cout << "  /gitbackup [o] - Toggle automatic pre-edit git backup commits (on, off)\n";
     std::cout << "  /undo          - Revert last code changes (git backup) and remove prompt from history\n";
     std::cout << "  /model [id]    - Switch to a different API model configuration by ID\n";
     std::cout << "  /skills        - Manage agent skills (list, show, learn, forget)\n";

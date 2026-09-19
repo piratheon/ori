@@ -7,7 +7,7 @@
 #include <unordered_map>
 #include <iostream>
 
-Config::Config() : port(8080), no_banner(false), no_clear(false), active_api_config("migrated-openrouter"), auto_execute_commands_mode("ask"), debug(false), rag_memory_enabled(false), skills_memory_enabled(true), show_command_output(true) {}
+Config::Config() : port(8080), no_banner(false), no_clear(false), active_api_config("migrated-openrouter"), auto_execute_commands_mode("ask"), debug(false), rag_memory_enabled(false), skills_memory_enabled(true), show_command_output(true), git_backup_enabled(true) {}
 
 ConfigManager::ConfigManager() {
     const char* home_dir = getenv("HOME");
@@ -39,6 +39,7 @@ void ConfigManager::loadConfig(Config& config) {
     config.rag_memory_enabled = root.get("rag_memory_enabled", false).asBool();
     config.skills_memory_enabled = root.get("skills_memory_enabled", true).asBool();
     config.show_command_output = root.get("show_command_output", true).asBool();
+    config.git_backup_enabled = root.get("git_backup_enabled", true).asBool();
 }
 
 void ConfigManager::saveConfig(const Config& config) {
@@ -52,6 +53,7 @@ void ConfigManager::saveConfig(const Config& config) {
     root["rag_memory_enabled"] = config.rag_memory_enabled;
     root["skills_memory_enabled"] = config.skills_memory_enabled;
     root["show_command_output"] = config.show_command_output;
+    root["git_backup_enabled"] = config.git_backup_enabled;
 
     std::filesystem::path p(config_path);
     std::filesystem::create_directories(p.parent_path());
@@ -102,7 +104,8 @@ void ConfigManager::updateConfig(const std::string& key, const std::string& valu
         {"debug", [](Config& c, const std::string& v){ c.debug = (v == "true"); }},
         {"rag_memory_enabled", [](Config& c, const std::string& v){ c.rag_memory_enabled = (v == "true" || v == "1" || v == "on"); }},
         {"skills_memory_enabled", [](Config& c, const std::string& v){ c.skills_memory_enabled = (v == "true" || v == "1" || v == "on"); }},
-        {"show_command_output", [](Config& c, const std::string& v){ c.show_command_output = (v == "true" || v == "1" || v == "on"); }}
+        {"show_command_output", [](Config& c, const std::string& v){ c.show_command_output = (v == "true" || v == "1" || v == "on"); }},
+        {"git_backup_enabled", [](Config& c, const std::string& v){ c.git_backup_enabled = (v == "true" || v == "1" || v == "on"); }}
     };
 
     auto it = updaters.find(key);
@@ -126,7 +129,8 @@ std::string ConfigManager::getConfigValue(const std::string& key) {
         {"debug", [](const Config& c){ return c.debug ? "true" : "false"; }},
         {"rag_memory_enabled", [](const Config& c){ return c.rag_memory_enabled ? "true" : "false"; }},
         {"skills_memory_enabled", [](const Config& c){ return c.skills_memory_enabled ? "true" : "false"; }},
-        {"show_command_output", [](const Config& c){ return c.show_command_output ? "true" : "false"; }}
+        {"show_command_output", [](const Config& c){ return c.show_command_output ? "true" : "false"; }},
+        {"git_backup_enabled", [](const Config& c){ return c.git_backup_enabled ? "true" : "false"; }}
     };
 
     auto it = getters.find(key);
@@ -151,6 +155,7 @@ std::string ConfigManager::getAllConfig() {
     root["rag_memory_enabled"] = config.rag_memory_enabled;
     root["skills_memory_enabled"] = config.skills_memory_enabled;
     root["show_command_output"] = config.show_command_output;
+    root["git_backup_enabled"] = config.git_backup_enabled;
 
     Json::StreamWriterBuilder writer;
     return Json::writeString(writer, root);

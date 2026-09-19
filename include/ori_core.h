@@ -31,6 +31,7 @@ struct Config {
     bool rag_memory_enabled;
     bool skills_memory_enabled;
     bool show_command_output;
+    bool git_backup_enabled;
 
     Config();
 };
