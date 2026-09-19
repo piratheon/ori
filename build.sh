@@ -37,9 +37,19 @@ detect_and_offer_install() {
 
     if [ ${#missing[@]} -gt 0 ]; then
         echo "The following required packages are missing: ${missing[*]}"
-        read -p "Do you want to install them now? (y/n): " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
+        install_pkgs=false
+        if [ ! -t 0 ] || [ "${CI:-false}" = "true" ] || [ "${DEBIAN_FRONTEND:-}" = "noninteractive" ]; then
+            echo "Non-interactive environment detected. Installing missing packages automatically..."
+            install_pkgs=true
+        else
+            read -p "Do you want to install them now? (y/n): " -n 1 -r
+            echo
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                install_pkgs=true
+            fi
+        fi
+
+        if [ "$install_pkgs" = true ]; then
             case "$pm" in
                 apt)
                     sudo apt-get update
