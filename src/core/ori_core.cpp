@@ -24,6 +24,7 @@
 
 std::atomic<bool> keep_running{true};
 bool g_is_gui_mode = false;
+bool g_is_interactive_mode = false;
 bool g_debug_enabled_in_gui_mode = false; // New global flag for GUI debug logging
 std::atomic<bool> OriAssistant::interrupted_flag{false};
 
@@ -35,6 +36,9 @@ void sigint_handler(int signum) {
 }
 
 void run_spinner(const std::string& message) {
+    if (!g_is_interactive_mode || g_is_gui_mode) {
+        return;
+    }
     const std::vector<std::string> frames = {
         "⠾", "⠽", "⠻", "⠯", "⠷"
     };
@@ -54,6 +58,33 @@ void run_spinner(const std::string& message) {
 bool isGuiEnvironment() {
     const char* display = std::getenv("DISPLAY");
     return display != nullptr && display[0] != '\0';
+}
+
+bool has_pkexec() {
+    static int cached_status = -1;
+    if (cached_status == -1) {
+        cached_status = (std::system("which pkexec > /dev/null 2>&1") == 0) ? 1 : 0;
+    }
+    return cached_status == 1;
+}
+
+std::string prepare_elevated_command(const std::string& cmd) {
+    if (!has_pkexec()) {
+        return cmd;
+    }
+    std::string result = cmd;
+    size_t pos = 0;
+    while ((pos = result.find("sudo", pos)) != std::string::npos) {
+        bool left_boundary = (pos == 0 || isspace((unsigned char)result[pos - 1]) || result[pos - 1] == ';' || result[pos - 1] == '&' || result[pos - 1] == '|');
+        bool right_boundary = (pos + 4 == result.length() || isspace((unsigned char)result[pos + 4]));
+        if (left_boundary && right_boundary) {
+            result.replace(pos, 4, "pkexec");
+            pos += 6;
+        } else {
+            pos += 4;
+        }
+    }
+    return result;
 }
 
 // ANSI Color Codes
@@ -292,6 +323,79 @@ std::string OriAssistant::readInput() {
                     continue;
                 }
             }
+        } else if (c == '\t') { // Tab autocompletion
+            std::vector<std::string> slash_commands = {
+                "/help", "/quit", "/exit", "/clear", "/cat", "/exec",
+                "/autoexec", "/model", "/thinking", "/agents", "/task", "/subagent"
+            };
+            if (buffer.rfind("/task", 0) == 0) {
+                slash_commands = {"/task list", "/task clear", "/task run", "/task next", "/task create ", "/task decompose "};
+            } else if (buffer.rfind("/subagent", 0) == 0) {
+                slash_commands = {"/subagent list"};
+            }
+
+            if (buffer.rfind("/cat ", 0) == 0) {
+                std::string prefix = buffer.substr(5);
+                std::string dir_path = ".";
+                std::string file_prefix = prefix;
+                size_t last_slash = prefix.find_last_of('/');
+                if (last_slash != std::string::npos) {
+                    dir_path = prefix.substr(0, last_slash);
+                    if (dir_path.empty()) dir_path = "/";
+                    file_prefix = prefix.substr(last_slash + 1);
+                }
+
+                std::vector<std::string> matches;
+                try {
+                    for (const auto& entry : std::filesystem::directory_iterator(dir_path)) {
+                        std::string filename = entry.path().filename().string();
+                        if (filename.rfind(file_prefix, 0) == 0) {
+                            std::string match = (dir_path == "." ? "" : (dir_path == "/" ? "/" : dir_path + "/")) + filename;
+                            if (entry.is_directory()) match += "/";
+                            matches.push_back(match);
+                        }
+                    }
+                } catch (...) {}
+
+                if (matches.size() == 1) {
+                    buffer = "/cat " + matches[0];
+                    cursor = buffer.size();
+                } else if (matches.size() > 1) {
+                    std::string common = matches[0];
+                    for (size_t k = 1; k < matches.size(); ++k) {
+                        size_t j = 0;
+                        while (j < common.size() && j < matches[k].size() && common[j] == matches[k][j]) j++;
+                        common = common.substr(0, j);
+                    }
+                    if (common.size() > file_prefix.size()) {
+                        buffer = "/cat " + common;
+                        cursor = buffer.size();
+                    }
+                }
+            } else if (buffer.empty() || buffer[0] == '/') {
+                std::vector<std::string> matches;
+                for (const auto& cmd : slash_commands) {
+                    if (cmd.rfind(buffer, 0) == 0) {
+                        matches.push_back(cmd);
+                    }
+                }
+                if (matches.size() == 1) {
+                    buffer = matches[0];
+                    cursor = buffer.size();
+                } else if (matches.size() > 1) {
+                    std::string common = matches[0];
+                    for (size_t k = 1; k < matches.size(); ++k) {
+                        size_t j = 0;
+                        while (j < common.size() && j < matches[k].size() && common[j] == matches[k][j]) j++;
+                        common = common.substr(0, j);
+                    }
+                    if (common.size() > buffer.size()) {
+                        buffer = common;
+                        cursor = buffer.size();
+                    }
+                }
+            }
+            refresh();
         } else if (isprint(static_cast<unsigned char>(c))) {
             buffer.insert(buffer.begin() + cursor, c);
             cursor++;
@@ -320,12 +424,18 @@ std::string OriAssistant::sendQuery(const std::string& prompt) {
         return colorize(RED, "Error: No active API provider is configured.");
     }
 
+    std::string agents_ctx = agentsManager.getAgentsPromptContext();
+    std::string full_prompt = prompt;
+    if (!agents_ctx.empty() && conversation_history.size() <= 1) {
+        full_prompt = agents_ctx + "\n" + prompt;
+    }
+
     if (config.debug) {
         std::cerr << "[DEBUG] Active API Config / Model: " << config.active_api_config << "\n";
-        std::cerr << "[DEBUG] Prompt: " << prompt << "\n";
+        std::cerr << "[DEBUG] Prompt: " << full_prompt << "\n";
     }
     
-    conversation_history.push_back({"user", prompt});
+    conversation_history.push_back({"user", full_prompt});
     
     // Create a temporary copy of the conversation history for the provider
     std::vector<std::pair<std::string, std::string>> provider_history;
@@ -420,6 +530,8 @@ bool OriAssistant::initialize() {
         std::cerr << RED << "Error: No valid API providers found in " << keys_path << "." << RESET << std::endl;
         return false;
     }
+
+    agentsManager.discoverAndLoad();
 
     // Set active provider
     auto it = providers_info.find(config.active_api_config);
@@ -535,8 +647,63 @@ void OriAssistant::run() {
                 if (!found_thinking_model) {
                     std::cout << YELLOW << "No 'thinking' role model configured in keys.json." << RESET << std::endl;
                 }
-            }
-            else {
+            } else if (input == "/agents" || input == "/agent") {
+                agentsManager.discoverAndLoad();
+                if (agentsManager.hasRules()) {
+                    std::cout << GREEN << "[✓] Discovered AGENTS.md rules:" << RESET << std::endl;
+                    for (const auto& rule : agentsManager.getLoadedRules()) {
+                        std::cout << BOLD << CYAN << "  [+] " << rule.filepath << RESET << std::endl;
+                        std::cout << rule.content << std::endl;
+                    }
+                } else {
+                    std::cout << YELLOW << "[!] No AGENTS.md instructions found in workspace hierarchy." << RESET << std::endl;
+                }
+            } else if (input.rfind("/task", 0) == 0) {
+                std::string arg = input.length() > 5 ? input.substr(6) : "";
+                if (arg == "list" || arg.empty()) {
+                    taskDispatcher.displayTasks();
+                } else if (arg == "clear") {
+                    taskDispatcher.clearTasks();
+                    std::cout << GREEN << "[✓] Task queue cleared." << RESET << std::endl;
+                } else if (arg == "run") {
+                    taskDispatcher.runAllTasks(*this);
+                } else if (arg == "next") {
+                    taskDispatcher.runNextTask(*this);
+                } else if (arg.rfind("decompose ", 0) == 0) {
+                    std::string goal = arg.substr(10);
+                    std::cout << CYAN << "[➜] Decomposing goal into subtasks..." << RESET << std::endl;
+                    taskDispatcher.decomposeGoal(*this, goal);
+                    taskDispatcher.displayTasks();
+                } else if (arg.rfind("create ", 0) == 0) {
+                    std::string task_spec = arg.substr(7);
+                    size_t pipe_pos = task_spec.find('|');
+                    std::string title = task_spec;
+                    std::string desc = task_spec;
+                    std::string role = "generalist";
+                    if (pipe_pos != std::string::npos) {
+                        title = task_spec.substr(0, pipe_pos);
+                        desc = task_spec.substr(pipe_pos + 1);
+                    }
+                    int tid = taskDispatcher.addTask(title, desc, role);
+                    std::cout << GREEN << "[✓] Added Task #" << tid << ": " << title << RESET << std::endl;
+                } else {
+                    std::cout << YELLOW << "Task Dispatcher Commands:" << RESET << std::endl;
+                    std::cout << "  /task list               - List task queue" << std::endl;
+                    std::cout << "  /task decompose <goal>  - Auto-decompose a goal into subtasks" << std::endl;
+                    std::cout << "  /task create <title>|<desc> - Manually add a task" << std::endl;
+                    std::cout << "  /task run                - Run all tasks" << std::endl;
+                    std::cout << "  /task next               - Run next task" << std::endl;
+                    std::cout << "  /task clear              - Clear task queue" << std::endl;
+                }
+            } else if (input.rfind("/subagent", 0) == 0) {
+                std::cout << BOLD << "--- Registered Subagents ---" << RESET << std::endl;
+                std::cout << "  [+] generalist - General reasoning and problem solving" << std::endl;
+                std::cout << "  [+] coder      - Software engineering and code refactoring" << std::endl;
+                std::cout << "  [+] reviewer   - Code review and bug inspection" << std::endl;
+                std::cout << "  [+] executor   - Linux terminal and command execution" << std::endl;
+                std::cout << "  [+] planner    - Task planning and goal decomposition" << std::endl;
+                std::cout << BOLD << "----------------------------" << RESET << std::endl;
+            } else {
                 std::cout << RED << "Unknown command: " << input << RESET << std::endl;
             }
         } else if (!input.empty()) {
@@ -801,7 +968,8 @@ pid_t popen2(const char *command, int *read_fd) {
     return pid;
 }
 
-void OriAssistant::handleCommandExecution(const std::string& command, bool auto_confirm, bool send_to_ai) {
+void OriAssistant::handleCommandExecution(const std::string& raw_command, bool auto_confirm, bool send_to_ai) {
+    std::string command = prepare_elevated_command(raw_command);
     bool confirmed = false;
     if (auto_confirm) {
         confirmed = true;
@@ -813,9 +981,9 @@ void OriAssistant::handleCommandExecution(const std::string& command, bool auto_
             confirmed = false;
             std::cout << YELLOW << "Auto-declining command execution: " << BOLD << CYAN << "<< " << command << " >> " << RESET << "\n";
         } else { // "ask" or any other value
-            // Warn if sudo/su present but still ask for interactive confirmation
-            if (command.find("sudo") != std::string::npos || command.find(" su ") != std::string::npos) {
-                std::cout << YELLOW << "Warning: this command requests elevated privileges (contains 'sudo' or 'su'). It may prompt for a password when run." << RESET << std::endl;
+            // Warn if elevated privilege commands present but still ask for interactive confirmation
+            if (command.find("sudo") != std::string::npos || command.find("pkexec") != std::string::npos || command.find(" su ") != std::string::npos) {
+                std::cout << YELLOW << "[!] Warning: this command requests elevated privileges (contains 'pkexec'/'sudo'/'su'). It may prompt for a password when run." << RESET << std::endl;
             }
 
             std::cout << YELLOW << "Execute the following command? (y/n): " << RESET << BOLD << CYAN << "<< " << command << " >> " << RESET;
@@ -852,7 +1020,12 @@ void OriAssistant::handleCommandExecution(const std::string& command, bool auto_
         if (!show_command_log) {
             keep_running = true;
             interrupted_flag = false;
-            std::thread spinner_thread(run_spinner, "executing command...");
+            std::thread spinner_thread;
+            if (g_is_interactive_mode && !g_is_gui_mode) {
+                spinner_thread = std::thread(run_spinner, "executing command...");
+            } else if (!g_is_gui_mode) {
+                std::cout << colorize(CYAN, "[➜] Executing command: ") << command << "..." << std::endl;
+            }
 
             while (true) {
                 if (interrupted_flag) {
@@ -885,7 +1058,9 @@ void OriAssistant::handleCommandExecution(const std::string& command, bool auto_
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
             }
             keep_running = false;
-            spinner_thread.join();
+            if (spinner_thread.joinable()) {
+                spinner_thread.join();
+            }
         } else {
             // blocking read when log is shown
             while ((bytes_read = read(read_fd, buffer, sizeof(buffer) - 1)) > 0) {
@@ -992,8 +1167,12 @@ void OriAssistant::showHelp() {
     std::cout << "  /exec [cmd]    - Execute a shell command and add the output to the chat context\n";
     std::cout << "  /autoexec [mode] - Set auto-execution mode for commands (ask, yes, no)\n";
     std::cout << "  /model [id]    - Switch to a different API model configuration by ID\n";
+    std::cout << "  /agents        - Show loaded AGENTS.md rules and reload from workspace\n";
+    std::cout << "  /task          - Manage task dispatcher (list, decompose, run, create, clear)\n";
+    std::cout << "  /subagent      - List registered subagents\n";
     std::cout << "  Or type any query to send to the AI assistant\n\n";
-    std::cout << "KEYBINDINGS:\n";
+    std::cout << "KEYBINDINGS & UX:\n";
+    std::cout << "  TAB            - Auto-complete commands and file paths\n";
     std::cout << "  Ctrl+F         - Toggle command execution log\n";
     std::cout << "  Ctrl+C / ESC   - Cancel running command or clear prompt\n";
 }

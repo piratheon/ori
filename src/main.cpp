@@ -1,6 +1,7 @@
 #include "ori_core.h"
 #include "ori_gui.h"
 #include "ori_migration.h"
+#include <unistd.h>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -356,10 +357,12 @@ int main(int argc, char* argv[]) {
     }
 
     if (!prompt.empty()) {
+        g_is_interactive_mode = false;
         processDirectPrompt(assistant, prompt, auto_confirm);
         return 0;
     }
 
+    g_is_interactive_mode = isatty(STDIN_FILENO);
     assistant.run();
     return 0;
 }

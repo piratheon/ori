@@ -310,7 +310,7 @@ void ori::start_gui(int port)
         Json::Value root;
         Json::Reader reader;
         reader.parse(req.body, root);
-        std::string command = root["command"].asString();
+        std::string command = prepare_elevated_command(root["command"].asString());
         std::string command_id = std::to_string(next_command_id++);
         std::string log_path = "/tmp/ori_exec_" + command_id + ".log";
         

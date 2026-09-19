@@ -7,6 +7,8 @@
 #include <atomic>
 #include <map>
 #include "ori_provider.h"
+#include "ori_agents.h"
+#include "ori_task.h"
 #include <json/json.h> // Include for Json::Value
 
 #ifdef CURL_FOUND
@@ -31,10 +33,12 @@ struct Config {
 
 extern bool g_debug_enabled_in_gui_mode; // Global flag for GUI debug logging
 extern bool g_is_gui_mode; // Global flag for GUI mode
+extern bool g_is_interactive_mode; // Global flag for interactive mode
 
 extern std::atomic<bool> keep_running;
 extern void run_spinner(const std::string& message);
 extern void sigint_handler(int signum);
+extern std::string colorize(const std::string& color, const std::string& text);
 
 // ANSI Color Codes (declared extern for main.cpp usage)
 extern const std::string RESET;
@@ -45,6 +49,9 @@ extern const std::string YELLOW;
 extern const std::string BLUE;
 extern const std::string MAGENTA;
 extern const std::string CYAN;
+
+bool has_pkexec();
+std::string prepare_elevated_command(const std::string& cmd);
 
 class ConfigManager {
 private:
@@ -91,6 +98,8 @@ private:
 public:
     Config config;
     ConfigManager configManager;
+    AgentsManager agentsManager;
+    TaskDispatcher taskDispatcher;
     
 public:
         
