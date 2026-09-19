@@ -110,45 +110,65 @@ void MigrationManager::renameExample() {
 
 void MigrationManager::firstTimeSetup() {
     if (debug_enabled) std::cerr << "Debug: Running first time setup." << std::endl;
-    std::cout << "Welcome to Ori! This looks like your first time." << std::endl;
-    std::cout << "How would you like to configure Ori?" << std::endl;
-    std::cout << "1. Simple chatbot (guided setup)" << std::endl;
-    std::cout << "2. Advanced agentic system (manual configuration)" << std::endl;
+    std::cout << GREEN << "[+] Welcome to Ori! This looks like your first time." << RESET << std::endl;
+    std::cout << CYAN << "[?] How would you like to configure Ori?" << RESET << std::endl;
+    std::cout << "  1. Simple chatbot (guided setup)" << std::endl;
+    std::cout << "  2. Advanced agentic system (manual configuration)" << std::endl;
+    std::cout << CYAN << "[➜] Choice [1-2] (default: 1): " << RESET;
     std::string choice;
     std::getline(std::cin, choice);
+    if (choice.empty()) {
+        choice = "1";
+    }
 
     if (choice == "1") {
         if (debug_enabled) std::cerr << "Debug: User chose Simple chatbot." << std::endl;
-        std::cout << "Select your API provider:" << std::endl;
-        std::cout << "1. Google" << std::endl;
-        std::cout << "2. Hugging Face" << std::endl;
-        std::cout << "3. OpenRouter" << std::endl;
+        std::cout << "\n" << CYAN << "[?] Select your API provider:" << RESET << std::endl;
+        std::cout << "  1. Google" << std::endl;
+        std::cout << "  2. Hugging Face" << std::endl;
+        std::cout << "  3. OpenRouter" << std::endl;
+        std::cout << CYAN << "[➜] Choice [1-3] (default: 1): " << RESET;
         std::string provider_choice;
         std::getline(std::cin, provider_choice);
 
         std::string provider;
         std::string default_model;
-        if (provider_choice == "1") {
-            provider = "google";
-            default_model = "gemini-2.5-flash";
-        } else if (provider_choice == "2") {
+        if (provider_choice == "2") {
             provider = "huggingface";
             default_model = "gpt2";
-        } else {
+        } else if (provider_choice == "3") {
             provider = "openrouter";
             default_model = "google/gemini-2.0-flash-exp:free";
+        } else {
+            provider = "google";
+            default_model = "gemini-2.5-flash";
         }
 
-        std::cout << "Please enter your API key for " << provider << ":" << std::endl;
+        std::cout << CYAN << "[?] Enter preferred model (default: " << default_model << "): " << RESET;
+        std::string selected_model;
+        std::getline(std::cin, selected_model);
+        if (selected_model.empty()) {
+            selected_model = default_model;
+        }
+
         std::string api_key;
-        std::getline(std::cin, api_key);
+        while (true) {
+            std::cout << CYAN << "[?] Enter your API key for " << provider << ": " << RESET;
+            std::getline(std::cin, api_key);
+            if (!api_key.empty()) {
+                break;
+            }
+            std::cout << RED << "[!] API key cannot be empty. Please try again." << RESET << std::endl;
+        }
+
+        std::string config_id = provider + "-default";
 
         Json::Value key_entry;
         key_entry["provider"] = provider;
         key_entry["api_key"] = api_key;
-        key_entry["id"] = provider + "-default";
+        key_entry["id"] = config_id;
         key_entry["role"] = "default";
-        key_entry["model"] = default_model;
+        key_entry["model"] = selected_model;
 
         Json::Value keys;
         keys.append(key_entry);
@@ -156,7 +176,14 @@ void MigrationManager::firstTimeSetup() {
         std::ofstream keys_json_file(keys_json_path);
         keys_json_file << keys;
 
-        std::cout << "Configuration saved to " << keys_json_path << std::endl;
+        // Save active_api_config into config.json so Ori activates this provider automatically
+        Config config;
+        ConfigManager config_manager;
+        config_manager.loadConfig(config);
+        config.active_api_config = config_id;
+        config_manager.saveConfig(config);
+
+        std::cout << GREEN << "[✓] Configuration saved to " << keys_json_path << RESET << std::endl;
 
     } else if (choice == "2") {
         if (debug_enabled) std::cerr << "Debug: User chose Advanced agentic system." << std::endl;
