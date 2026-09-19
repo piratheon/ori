@@ -14,11 +14,8 @@
 > [!IMPORTANT]
 > The development of this repository is currently slowed down due to time constraints and competing priorities.
 
-**Why archived?**
+**Why?**
 - Ori represents an ambitious integration of multiple technologies (C++/Textual TUI, multi-LLM orchestration, web UI etc ...) that requires sustained focus to maintain and evolve responsibly. Current commitments (education) limit capacity for meaningful updates.
-
-**Will this resume?**
-- Possibly. If circumstances change and development capacity returns, this will be unarchived and development will resume. The codebase is preserved in a working state for that eventuality.
 
 ---
 ## Quick links
