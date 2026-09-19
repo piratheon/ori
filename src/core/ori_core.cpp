@@ -326,7 +326,8 @@ std::string OriAssistant::readInput() {
         } else if (c == '\t') { // Tab autocompletion
             std::vector<std::string> slash_commands = {
                 "/help", "/quit", "/exit", "/clear", "/cat", "/exec",
-                "/autoexec", "/model", "/thinking", "/agents", "/task", "/subagent"
+                "/autoexec", "/model", "/thinking", "/agents", "/task", "/subagent",
+                "/undo", "/cmdoutput", "/gitbackup", "/skills", "/skill", "/rag"
             };
             if (buffer.rfind("/task", 0) == 0) {
                 slash_commands = {"/task list", "/task clear", "/task run", "/task next", "/task create ", "/task decompose "};
@@ -419,15 +420,88 @@ void OriAssistant::setSystemPrompt(const std::string& prompt) {
     conversation_history.push_back({"system", prompt});
 }
 
+bool OriAssistant::gitBackupCommit(std::string& out_commit_hash) {
+    out_commit_hash.clear();
+    if (!config.git_backup_enabled) {
+        return false;
+    }
+    if (std::system("which git > /dev/null 2>&1") != 0) {
+        return false;
+    }
+
+    if (std::system("git rev-parse --is-inside-work-tree > /dev/null 2>&1") != 0) {
+        std::system("git init > /dev/null 2>&1");
+        std::system("git config user.name 'Ori Assistant' > /dev/null 2>&1");
+        std::system("git config user.email 'ori@local' > /dev/null 2>&1");
+    }
+
+    std::system("git add -A > /dev/null 2>&1");
+    std::system("git commit --allow-empty -m \"ori-backup: pre-edit snapshot\" > /dev/null 2>&1");
+
+    FILE* pipe = popen("git rev-parse HEAD 2>/dev/null", "r");
+    if (pipe) {
+        char buffer[128];
+        if (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+            std::string hash = buffer;
+            while (!hash.empty() && (hash.back() == '\n' || hash.back() == '\r')) {
+                hash.pop_back();
+            }
+            out_commit_hash = hash;
+        }
+        pclose(pipe);
+    }
+    return !out_commit_hash.empty();
+}
+
+bool OriAssistant::performUndo() {
+    if (undo_snapshots.empty()) {
+        std::cout << YELLOW << "[!] No actions to undo." << RESET << std::endl;
+        return false;
+    }
+
+    UndoSnapshot snap = undo_snapshots.back();
+    undo_snapshots.pop_back();
+
+    bool code_reverted = false;
+    if (snap.has_git_commit && !snap.git_commit_hash.empty()) {
+        std::string cmd = "git reset --hard HEAD~1 > /dev/null 2>&1";
+        if (std::system(cmd.c_str()) == 0) {
+            code_reverted = true;
+        } else {
+            cmd = "git reset --hard " + snap.git_commit_hash + "~1 > /dev/null 2>&1";
+            if (std::system(cmd.c_str()) == 0) {
+                code_reverted = true;
+            }
+        }
+    }
+
+    if (conversation_history.size() > snap.history_size) {
+        conversation_history.resize(snap.history_size);
+    }
+
+    std::cout << GREEN << "[✓] Undo performed successfully! "
+              << (code_reverted ? "Code restored to pre-edit git backup snapshot and " : "")
+              << "conversation prompt/response removed from history." << RESET << std::endl;
+    return true;
+}
+
 std::string OriAssistant::sendQuery(const std::string& prompt) {
     if (!active_provider) {
         return colorize(RED, "Error: No active API provider is configured.");
     }
 
     std::string agents_ctx = agentsManager.getAgentsPromptContext();
+    std::string skills_ctx = skillsManager.getSkillsPromptContext();
+    std::string rag_ctx = ragMemory.getPromptContext(prompt);
+
     std::string full_prompt = prompt;
-    if (!agents_ctx.empty() && conversation_history.size() <= 1) {
-        full_prompt = agents_ctx + "\n" + prompt;
+    std::string prefix_ctx = "";
+    if (!agents_ctx.empty() && conversation_history.size() <= 1) prefix_ctx += agents_ctx;
+    if (!skills_ctx.empty()) prefix_ctx += skills_ctx;
+    if (!rag_ctx.empty()) prefix_ctx += rag_ctx;
+
+    if (!prefix_ctx.empty()) {
+        full_prompt = prefix_ctx + "\n" + prompt;
     }
 
     if (config.debug) {
@@ -446,6 +520,10 @@ std::string OriAssistant::sendQuery(const std::string& prompt) {
     std::string response = active_provider->sendQuery(prompt, provider_history);
     
     conversation_history.push_back({"assistant", response});
+
+    if (config.rag_memory_enabled) {
+        ragMemory.addChunk("User: " + prompt + "\nAssistant: " + response, "conversation");
+    }
     
     return response;
 }
@@ -532,6 +610,9 @@ bool OriAssistant::initialize() {
     }
 
     agentsManager.discoverAndLoad();
+    skillsManager.discoverAndLoad(config.skills_memory_enabled);
+    ragMemory.setEnabled(config.rag_memory_enabled);
+    ragMemory.load();
 
     // Set active provider
     auto it = providers_info.find(config.active_api_config);
@@ -703,6 +784,140 @@ void OriAssistant::run() {
                 std::cout << "  [+] executor   - Linux terminal and command execution" << std::endl;
                 std::cout << "  [+] planner    - Task planning and goal decomposition" << std::endl;
                 std::cout << BOLD << "----------------------------" << RESET << std::endl;
+            } else if (input == "/undo") {
+                performUndo();
+            } else if (input.rfind("/gitbackup", 0) == 0) {
+                std::string arg = input.length() > 10 ? input.substr(11) : "";
+                if (arg == "on" || arg == "true" || arg == "yes") {
+                    config.git_backup_enabled = true;
+                    configManager.saveConfig(config);
+                    std::cout << GREEN << "[✓] Pre-edit git backup commits enabled." << RESET << std::endl;
+                } else if (arg == "off" || arg == "false" || arg == "no") {
+                    config.git_backup_enabled = false;
+                    configManager.saveConfig(config);
+                    std::cout << GREEN << "[✓] Pre-edit git backup commits disabled." << RESET << std::endl;
+                } else {
+                    config.git_backup_enabled = !config.git_backup_enabled;
+                    configManager.saveConfig(config);
+                    std::cout << GREEN << "[✓] Pre-edit git backup commits set to: " << (config.git_backup_enabled ? "ON" : "OFF") << RESET << std::endl;
+                }
+            } else if (input.rfind("/cmdoutput", 0) == 0) {
+                std::string arg = input.length() > 10 ? input.substr(11) : "";
+                if (arg == "on" || arg == "true" || arg == "yes") {
+                    config.show_command_output = true;
+                    configManager.saveConfig(config);
+                    std::cout << GREEN << "[✓] Command output display enabled." << RESET << std::endl;
+                } else if (arg == "off" || arg == "false" || arg == "no") {
+                    config.show_command_output = false;
+                    configManager.saveConfig(config);
+                    std::cout << GREEN << "[✓] Command output display disabled." << RESET << std::endl;
+                } else {
+                    config.show_command_output = !config.show_command_output;
+                    configManager.saveConfig(config);
+                    std::cout << GREEN << "[✓] Command output display set to: " << (config.show_command_output ? "ON" : "OFF") << RESET << std::endl;
+                }
+            } else if (input.rfind("/skill", 0) == 0 || input.rfind("/skills", 0) == 0) {
+                std::string arg = "";
+                if (input.rfind("/skills", 0) == 0 && input.length() > 7) arg = input.substr(8);
+                else if (input.rfind("/skill", 0) == 0 && input.length() > 6) arg = input.substr(7);
+
+                if (arg == "list" || arg.empty()) {
+                    skillsManager.discoverAndLoad(config.skills_memory_enabled);
+                    std::cout << BOLD << "--- Configured & Learned Agent Skills ---" << RESET << std::endl;
+                    for (const auto& skill : skillsManager.getSkills()) {
+                        std::cout << BOLD << CYAN << "  [+] " << skill.name << RESET
+                                  << " (" << (skill.is_builtin ? "built-in" : (skill.is_learned ? "learned" : "configured")) << ")\n"
+                                  << "      " << skill.description << std::endl;
+                    }
+                    std::cout << BOLD << "---------------------------------------" << RESET << std::endl;
+                } else if (arg.rfind("show ", 0) == 0) {
+                    std::string name = arg.substr(5);
+                    bool found = false;
+                    for (const auto& s : skillsManager.getSkills()) {
+                        if (s.name == name) {
+                            std::cout << BOLD << "Skill: " << s.name << RESET << " (" << s.source_file << ")\n";
+                            std::cout << "Description: " << s.description << "\n";
+                            std::cout << "Instructions:\n" << s.instructions << std::endl;
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) std::cout << RED << "Skill '" << name << "' not found." << RESET << std::endl;
+                } else if (arg.rfind("learn ", 0) == 0) {
+                    std::string spec = arg.substr(6);
+                    size_t p1 = spec.find('|');
+                    size_t p2 = p1 != std::string::npos ? spec.find('|', p1 + 1) : std::string::npos;
+                    if (p1 != std::string::npos && p2 != std::string::npos) {
+                        std::string name = spec.substr(0, p1);
+                        std::string desc = spec.substr(p1 + 1, p2 - p1 - 1);
+                        std::string inst = spec.substr(p2 + 1);
+                        auto trim = [](std::string& s) {
+                            size_t a = s.find_first_not_of(" \t");
+                            if (a != std::string::npos) s = s.substr(a);
+                            size_t b = s.find_last_not_of(" \t");
+                            if (b != std::string::npos) s = s.substr(0, b + 1);
+                        };
+                        trim(name); trim(desc); trim(inst);
+                        skillsManager.addLearnedSkill(name, desc, inst);
+                        std::cout << GREEN << "[✓] Learned skill '" << name << "' saved to persistent memory." << RESET << std::endl;
+                    } else {
+                        std::cout << YELLOW << "Usage: /skill learn <name> | <description> | <instructions>" << RESET << std::endl;
+                    }
+                } else if (arg.rfind("forget ", 0) == 0) {
+                    std::string name = arg.substr(7);
+                    if (skillsManager.removeLearnedSkill(name)) {
+                        std::cout << GREEN << "[✓] Learned skill '" << name << "' removed." << RESET << std::endl;
+                    } else {
+                        std::cout << RED << "Learned skill '" << name << "' not found." << RESET << std::endl;
+                    }
+                } else {
+                    std::cout << YELLOW << "Skills System Commands:" << RESET << std::endl;
+                    std::cout << "  /skills list                                - List all skills" << std::endl;
+                    std::cout << "  /skill show <name>                          - Show skill details" << std::endl;
+                    std::cout << "  /skill learn <name> | <desc> | <instruct>  - Learn a new skill" << std::endl;
+                    std::cout << "  /skill forget <name>                        - Forget a learned skill" << std::endl;
+                }
+            } else if (input.rfind("/rag", 0) == 0) {
+                std::string arg = input.length() > 4 ? input.substr(5) : "";
+                if (arg == "on" || arg == "enable") {
+                    config.rag_memory_enabled = true;
+                    ragMemory.setEnabled(true);
+                    configManager.saveConfig(config);
+                    std::cout << GREEN << "[✓] RAG Memory enabled." << RESET << std::endl;
+                } else if (arg == "off" || arg == "disable") {
+                    config.rag_memory_enabled = false;
+                    ragMemory.setEnabled(false);
+                    configManager.saveConfig(config);
+                    std::cout << GREEN << "[✓] RAG Memory disabled." << RESET << std::endl;
+                } else if (arg.rfind("add ", 0) == 0) {
+                    std::string text = arg.substr(4);
+                    ragMemory.addChunk(text, "user_added");
+                    std::cout << GREEN << "[✓] Added text chunk to RAG Memory." << RESET << std::endl;
+                } else if (arg.rfind("search ", 0) == 0) {
+                    std::string q = arg.substr(7);
+                    ragMemory.setEnabled(true);
+                    auto results = ragMemory.retrieveRelevant(q, 5);
+                    std::cout << BOLD << "--- RAG Memory Search Results ---" << RESET << std::endl;
+                    if (results.empty()) {
+                        std::cout << "No matching chunks found." << std::endl;
+                    } else {
+                        for (const auto& chunk : results) {
+                            std::cout << CYAN << "[Chunk " << chunk.id << "] (" << chunk.source << ")" << RESET << "\n" << chunk.content << std::endl;
+                        }
+                    }
+                    std::cout << BOLD << "--------------------------------" << RESET << std::endl;
+                } else if (arg == "clear") {
+                    ragMemory.clear();
+                    std::cout << GREEN << "[✓] RAG Memory cleared." << RESET << std::endl;
+                } else {
+                    std::cout << BOLD << "RAG Memory Status: " << (config.rag_memory_enabled ? GREEN + "ENABLED" : YELLOW + "DISABLED") << RESET << "\n";
+                    std::cout << "Total Chunks Indexed: " << ragMemory.getChunks().size() << "\n\n";
+                    std::cout << YELLOW << "RAG Memory Commands:" << RESET << std::endl;
+                    std::cout << "  /rag on / off             - Toggle RAG Memory" << std::endl;
+                    std::cout << "  /rag add <text>           - Add text chunk to RAG Memory" << std::endl;
+                    std::cout << "  /rag search <query>       - Search RAG Memory" << std::endl;
+                    std::cout << "  /rag clear                - Clear all RAG Memory chunks" << std::endl;
+                }
             } else {
                 std::cout << RED << "Unknown command: " << input << RESET << std::endl;
             }
@@ -750,23 +965,30 @@ void OriAssistant::handleResponse(const std::string& response, bool auto_confirm
 
     size_t current_pos = 0;
     while (true) {
-        // Find next tag: either [exec] or [edit]
+        // Find next tag: [exec], [edit], [writefile], or [learn_skill]
         size_t exec_start = response.find("[exec]", current_pos);
         size_t exec_end = (exec_start != std::string::npos) ? response.find("[/exec]", exec_start) : std::string::npos;
         size_t edit_start = response.find("[edit]", current_pos);
         size_t edit_end = (edit_start != std::string::npos) ? response.find("[/edit]", edit_start) : std::string::npos;
         size_t writefile_start = response.find("[writefile(", current_pos);
         size_t writefile_end = (writefile_start != std::string::npos) ? response.find("[/writefile]", writefile_start) : std::string::npos;
+        size_t learn_start = response.find("[learn_skill]", current_pos);
+        size_t learn_end = (learn_start != std::string::npos) ? response.find("[/learn_skill]", learn_start) : std::string::npos;
 
         // Determine which tag comes next
         size_t next_pos = std::string::npos;
-        enum TagType { NONE, EXEC, EDIT, WRITEFILE } next_tag = NONE;
-        if (exec_start != std::string::npos && (edit_start == std::string::npos || exec_start < edit_start) && (writefile_start == std::string::npos || exec_start < writefile_start)) {
+        enum TagType { NONE, EXEC, EDIT, WRITEFILE, LEARN_SKILL } next_tag = NONE;
+        if (exec_start != std::string::npos && (next_pos == std::string::npos || exec_start < next_pos)) {
             next_pos = exec_start; next_tag = EXEC;
-        } else if (edit_start != std::string::npos && (writefile_start == std::string::npos || edit_start < writefile_start)) {
+        }
+        if (edit_start != std::string::npos && (next_pos == std::string::npos || edit_start < next_pos)) {
             next_pos = edit_start; next_tag = EDIT;
-        } else if (writefile_start != std::string::npos) {
+        }
+        if (writefile_start != std::string::npos && (next_pos == std::string::npos || writefile_start < next_pos)) {
             next_pos = writefile_start; next_tag = WRITEFILE;
+        }
+        if (learn_start != std::string::npos && (next_pos == std::string::npos || learn_start < next_pos)) {
+            next_pos = learn_start; next_tag = LEARN_SKILL;
         }
 
 
@@ -801,6 +1023,18 @@ void OriAssistant::handleResponse(const std::string& response, bool auto_confirm
             current_pos = exec_end + strlen("[/exec]");
             continue;
         } else if (next_tag == EDIT) {
+            // Ensure pre-edit git backup commit snapshot before modifying codebase
+            size_t hist_target = conversation_history.size() >= 2 ? conversation_history.size() - 2 : conversation_history.size();
+            if (undo_snapshots.empty() || undo_snapshots.back().history_size != hist_target) {
+                std::string commit_hash;
+                bool committed = gitBackupCommit(commit_hash);
+                UndoSnapshot snap;
+                snap.history_size = hist_target;
+                snap.git_commit_hash = commit_hash;
+                snap.has_git_commit = committed;
+                undo_snapshots.push_back(snap);
+            }
+
             // Handle edit block using strict JSON parsing (JsonCpp)
             if (edit_end == std::string::npos) break; // malformed
             size_t json_start = edit_start + strlen("[edit]");
@@ -898,6 +1132,18 @@ void OriAssistant::handleResponse(const std::string& response, bool auto_confirm
             current_pos = edit_end + strlen("[/edit]");
             continue;
         } else if (next_tag == WRITEFILE) {
+            // Ensure pre-edit git backup commit snapshot before modifying codebase
+            size_t hist_target = conversation_history.size() >= 2 ? conversation_history.size() - 2 : conversation_history.size();
+            if (undo_snapshots.empty() || undo_snapshots.back().history_size != hist_target) {
+                std::string commit_hash;
+                bool committed = gitBackupCommit(commit_hash);
+                UndoSnapshot snap;
+                snap.history_size = hist_target;
+                snap.git_commit_hash = commit_hash;
+                snap.has_git_commit = committed;
+                undo_snapshots.push_back(snap);
+            }
+
             // Handle writefile block
             if (writefile_end == std::string::npos) break; // malformed
             size_t fn_start = writefile_start + strlen("[writefile(");
@@ -923,6 +1169,26 @@ void OriAssistant::handleResponse(const std::string& response, bool auto_confirm
                 std::cout << RED << "Failed to create file: " << filename << RESET << std::endl;
             }
             current_pos = writefile_end + strlen("[/writefile]");
+            continue;
+        } else if (next_tag == LEARN_SKILL) {
+            if (learn_end == std::string::npos) break; // malformed
+            size_t payload_start = learn_start + strlen("[learn_skill]");
+            std::string payload = response.substr(payload_start, learn_end - payload_start);
+
+            Json::CharReaderBuilder readerBuilder;
+            std::string errs;
+            Json::Value root;
+            std::unique_ptr<Json::CharReader> reader(readerBuilder.newCharReader());
+            if (reader->parse(payload.c_str(), payload.c_str() + payload.size(), &root, &errs)) {
+                std::string name = root.get("name", "").asString();
+                std::string desc = root.get("description", "").asString();
+                std::string inst = root.get("instructions", "").asString();
+                if (!name.empty()) {
+                    skillsManager.addLearnedSkill(name, desc, inst);
+                    std::cout << GREEN << "[✓] Automatically learned new skill: " << name << RESET << std::endl;
+                }
+            }
+            current_pos = learn_end + strlen("[/learn_skill]");
             continue;
         }
     }
@@ -1075,11 +1341,21 @@ void OriAssistant::handleCommandExecution(const std::string& raw_command, bool a
 
         command_log.push_back({command, result});
 
+        if (config.show_command_output) {
+            std::cout << colorize(CYAN, "\n+---------------------------- [ COMMAND OUTPUT ] ----------------------------+") << std::endl;
+            if (!result.empty()) {
+                std::cout << result;
+                if (result.back() != '\n') std::cout << "\n";
+            }
+            std::cout << colorize(CYAN, "+-------------------------- [ END COMMAND OUTPUT ] --------------------------+\n") << std::endl;
+        } else {
+            std::cout << YELLOW << "[!] Command output printing is disabled. Type '/cmdoutput on' to enable." << RESET << std::endl;
+        }
+
         if (send_to_ai) {
             std::string feedback_prompt = "The command \"" + command + "\" produced the following output:\n---\n" + result + "\n---\nPlease summarize this output or answer the original question based on it.";
             processSingleRequest(feedback_prompt, auto_confirm);
         } else {
-            std::cout << result << std::endl;
             pre_prompt_context += "The user executed the command `" + command + "` with the following output:\n---\n" + result + "\n---";
         }
         } else {
@@ -1165,8 +1441,13 @@ void OriAssistant::showHelp() {
     std::cout << "  /clear         - Clear the screen\n";
     std::cout << "  /cat [file]    - Print file content and add it to the chat context\n";
     std::cout << "  /exec [cmd]    - Execute a shell command and add the output to the chat context\n";
-    std::cout << "  /autoexec [mode] - Set auto-execution mode for commands (ask, yes, no)\n";
+    std::cout << "  /autoexec [m]  - Set auto-execution mode for commands (ask, yes, no)\n";
+    std::cout << "  /cmdoutput [o] - Toggle command output display (on, off)\n";
+    std::cout << "  /gitbackup [o] - Toggle automatic pre-edit git backup commits (on, off)\n";
+    std::cout << "  /undo          - Revert last code changes (git backup) and remove prompt from history\n";
     std::cout << "  /model [id]    - Switch to a different API model configuration by ID\n";
+    std::cout << "  /skills        - Manage agent skills (list, show, learn, forget)\n";
+    std::cout << "  /rag           - Manage RAG memory (on, off, add, search, clear)\n";
     std::cout << "  /agents        - Show loaded AGENTS.md rules and reload from workspace\n";
     std::cout << "  /task          - Manage task dispatcher (list, decompose, run, create, clear)\n";
     std::cout << "  /subagent      - List registered subagents\n";

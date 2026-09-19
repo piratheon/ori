@@ -53,6 +53,7 @@ set(SOURCES
     src/core/ori_provider.cpp
     src/core/ori_agents.cpp
     src/core/ori_task.cpp
+    src/core/ori_skills.cpp
     src/gui/gui.cpp
 )
 
